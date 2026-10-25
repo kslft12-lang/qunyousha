@@ -17,7 +17,7 @@ echo   >>> https://xxxx-xxxx-xxxx.trycloudflare.com
 echo   >>> 把它发到群里，群友浏览器打开点「联机」即可
 echo   >>> （每次重开隧道网址会变；本机游玩用 http://localhost:8123）
 echo.
-start "公网隧道" cmd /k "tools\cloudflared.exe tunnel --url http://localhost:8123"
+start "公网隧道" cmd /k "tools\cloudflared.exe tunnel --protocol http2 --url http://localhost:8123"
 
 timeout /t 3 >nul
 echo 两个窗口都已启动。想停服：直接关闭那两个窗口即可。
