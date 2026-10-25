@@ -5,7 +5,21 @@
 ## 运行
 
 - **单机**：直接双击 `index.html`；或 `python -m http.server 8080` 后访问 http://localhost:8080
-- **联机**：`node server.js [端口]`（默认 8123）。所有人浏览器打开 `http://<主机IP>:8123`，点「联机」输入昵称进入大厅；房主（0 号位）选人数点「开始联机对局」，空座位由机器人代打。服务器是权威引擎：客户端只收按座位裁剪的快照（别人的手牌/暗置身份不可见），决策经 WebSocket 回传。有人掉线时其座位自动转为机器人应答（90 秒超时兜底）。
+- **局域网/公网联机**：见下方[公网联机部署](#公网联机部署)
+
+## 公网联机部署
+
+最快方式（不需要买服务器、不需要注册账号，利用 Cloudflare 免费快速隧道）：
+
+1. 下载 [cloudflared Windows 版](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe)，放到 `tools/cloudflared.exe`（`tools/` 已被 gitignore，不入库）
+2. 双击 **`start-online.bat`**：它会同时启动游戏服务器（`node server.js 8123`）和公网隧道
+3. 隧道窗口会出现一行 `https://xxxx-xxxx.trycloudflare.com`，把它发到群里——群友浏览器打开、点「联机」输昵称进大厅即可；房主（先加入的人）开局，空座位机器人代打
+
+注意：
+
+- 快速隧道**每次重启网址都会变**；要固定网址需注册 Cloudflare 账号建命名隧道（`tools\cloudflared.exe tunnel login` 后按其文档创建并运行），或改用下面的部署平台
+- 服务器当前是"单房间、无鉴权"的框架实现：知道网址的人都能进入（对局开始后加入为观战），别用于需要私密性的场景
+- 有自己的云服务器：上传代码 → `node server.js 8123` → 安全组放行端口即可，建议用 `pm2 start server.js` 或 systemd 守护；也可推到 Render/Railway/Zeabur 等 Node 托管平台自动部署（启动命令 `node server.js`，平台会给公网域名）
 
 ## 玩法
 
