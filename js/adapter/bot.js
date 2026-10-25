@@ -20,9 +20,11 @@ QYS.bot = { fast: false }; // fast=true 时关闭思考延迟（Node 模拟测�
         if (tag === '无懈') return Math.random() < 0.5;
         return true; // 八卦阵等默认发动
       },
-      async chooseTargets(p, { candidates } = {}) {
+      async chooseTargets(p, { candidates, hint } = {}) {
         await wait();
         if (!candidates || !candidates.length) return null;
+        // orange 治疗优先给自己（否则随机目标可能奶敌人）
+        if (/orange/.test(hint || '') && candidates.includes(p)) return [p];
         return [candidates[(Math.random() * candidates.length) | 0]];
       },
       async askPlay(p, { playable, canSkill } = {}) {

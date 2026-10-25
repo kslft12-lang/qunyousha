@@ -115,8 +115,11 @@ QYS.ui.create = function (root) {
     const locked = g.isLocked ? g.isLocked(p) : !!p.locked;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
+    // orange 计数（秋秋人）：头像下方橙色徽标
+    const showOrg = (p.skillIds || []).includes('sk_orange');
+    const orgBadge = showOrg ? `<span class="orgBadge" title="orange：出牌阶段可使用，1个回复1点体力">${p.oranges ?? 0}</span>` : '';
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
-      ${avatarHtml(p)}
+      <div class="avWrap">${avatarHtml(p)}${orgBadge}</div>
       <div class="pinfo">
         <div class="pname"><span class="pnum">${num}号</span>${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
         <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>

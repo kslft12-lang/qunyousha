@@ -62,6 +62,7 @@ QYS.core = QYS.core || {};
         title: ch.title, skillIds: ch.skills,
         maxHp, hp: maxHp,
         hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null }, judges: [],
+        oranges: 0,          // orange 计数（秋秋人）
         alive: true, revealed: identity === '主', turn: null, io: null,
       };
       p.io = ioFor ? ioFor(p) : null;
@@ -148,7 +149,26 @@ QYS.core = QYS.core || {};
     };
     game.drawCards = async (p, n) => {
       const got = [];
-      for (let i = 0; i < n; i++) { const c = game.drawCard(); if (c) { p.hand.push(c); got.push(c); } }
+      for (let i = 0; i < n; i++) {
+        const c = game.drawCard();
+        if (!c) continue;
+        // 【亚撒西】抽到杀 → 弃置并改为摸两张（每回合限一次，替换抽到的牌继续走本规则的其他转化）
+        if (game.hasSkill(p, 'sk_yasaxi') && c.defId === 'sha' && p.yasaxiTurn !== game.turnCount) {
+          p.yasaxiTurn = game.turnCount;
+          game.toDiscard(c, p, '弃置');
+          game.log(`${p.name} 的【亚撒西】触发：弃置${QYS.cardLabel(c)}，改为摸两张牌`, 'skill');
+          await game.drawCards(p, 2);
+          continue;
+        }
+        // 【orange】抽到桃 → 自动弃置并转化为 2 个 orange
+        if (game.hasSkill(p, 'sk_orange') && c.defId === 'tao') {
+          p.oranges = (p.oranges || 0) + 2;
+          game.toDiscard(c, p, '转化');
+          game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges}）`, 'skill');
+          continue;
+        }
+        p.hand.push(c); got.push(c);
+      }
       if (got.length) { game.log(`${p.name} 摸了 ${got.length} 张牌`, 'system'); game.update(); }
       return got;
     };
@@ -377,12 +397,12 @@ QYS.core = QYS.core || {};
       game.update();
     };
 
-    // ---- 触发技钩子分发 ----
+    // ---- 触发技钩子分发（hooks 存在即触发，不限技能类型——主动技也可带触发钩子）----
     game.emit = async (name, payload) => {
       for (const p of game.alive()) {
         for (const skId of p.skillIds) {
           const sk = QYS.data.skills[skId];
-          if (sk && sk.type === 'trigger' && sk.hooks && sk.hooks[name]) await sk.hooks[name](game, p, payload);
+          if (sk && sk.hooks && sk.hooks[name]) await sk.hooks[name](game, p, payload);
         }
       }
     };
@@ -418,6 +438,7 @@ QYS.core = QYS.core || {};
         hp: p.hp, maxHp: p.maxHp, alive: p.alive, revealed: p.revealed,
         identity: (p.revealed || game.over || p.seat === seat) ? p.identity : null,
         skillIds: p.skillIds,
+        oranges: p.oranges || 0,
         locked: game.isLocked(p),
         handCount: p.hand.length,
         hand: p.seat === seat ? p.hand.map(c => ({ ...c })) : undefined,

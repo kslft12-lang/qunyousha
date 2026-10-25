@@ -127,6 +127,41 @@ QYS.data.skills = {
     desc: '锁定技。你的手牌上限-1，摸牌阶段摸牌数+1。',
   },
 
+  // 【orange】：每回合开始获得 1 个 orange；抽到【桃】自动弃置并转化为 2 个 orange；
+  // 出牌阶段可对任意角色（含自己）使用 orange：1 个回复 1 点体力，可连续使用直到用完。
+  // 计数显示在头像下方的橙色徽标；主动使用走技能按钮（freq 不设 oncePerTurn = 不限次）。
+  sk_orange: {
+    name: 'orange',
+    type: 'active',
+    desc: '每回合开始时你获得 1 个 orange；你抽到【桃】时自动弃置之并转化为 2 个 orange。出牌阶段你可以使用 orange：令任意角色（包括自己）回复 1 点体力，只要有 orange 就可以继续使用。',
+    canUse(game, p) { return p.oranges > 0; },
+    async exec(game, p) {
+      const sel = await game.askTargets(p, {
+        candidates: game.alive(), min: 1, max: 1,
+        hint: '【orange】：选择回复 1 点体力的目标（可含自己）',
+      });
+      if (!sel || !sel.length) return false;
+      p.oranges--;
+      game.log(`${p.name} 使用了 1 个 orange（剩 ${p.oranges}）`, 'skill');
+      await game.heal(sel[0], 1, p);
+      return true;
+    },
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        p.oranges = (p.oranges || 0) + 1;
+        game.log(`${p.name} 的【orange】触发，获得 1 个 orange（共 ${p.oranges}）`, 'skill');
+      },
+    },
+  },
+
+  // 【亚撒西】：抽到【杀】时弃置之并改为摸两张，每回合限一次。实现在 game.drawCards。
+  sk_yasaxi: {
+    name: '亚撒西',
+    type: 'trigger',
+    desc: '每回合限一次，你抽到【杀】时将之弃置，改为摸两张牌。',
+  },
+
   // 【凑凑的捣乱狂】：回合开始时，可将任意两名角色（含自己）的手牌全部洗混后随机分配回两人。
   sk_daoluan: {
     name: '凑凑的捣乱狂',
@@ -161,4 +196,6 @@ QYS.data.characters = [
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
   { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
+  // TODO: 秋秋人头像待补 assets/characters/qiuqiu.png（当前显示首字圆徽）
+  { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
 ];

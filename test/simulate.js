@@ -46,6 +46,7 @@ async function play(n) {
     const io = () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets() { return null; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
     const g = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
     const me = g.players[0], far = g.players[2]; // 环距 2
+    me.skillIds = []; // 清空随机分配的技能，保证杀次数断言不受角色影响
     if (g.distance(me, far) !== 2) throw new Error('环距离计算错误');
     if (g.inShaRange(me, far)) throw new Error('无武器距离2应在范围外');
     me.equips.weapon = { defId: 'qinglong', suit: '♠', number: 5 };
@@ -110,6 +111,37 @@ async function play(n) {
       const cands = shaDef.target.candidates(g5, me);
       if (!cands.includes(far)) throw new Error('灌汤包应无视距离选中1血目标');
       console.log('灌汤包检查 ✓（两张杀/无视距离/连弩兼容）');
+    }
+
+    // orange / 亚撒西检查：抽牌转化链、回合获得、主动使用回血、每回合限一次
+    {
+      const io6 = () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets(p, o) { return [o.candidates[0]]; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
+      const g6 = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['秋', '甲', '乙'], ioFor: io6 });
+      const qiu = g6.players[0];
+      qiu.skillIds = ['sk_orange', 'sk_yasaxi'];
+      g6.turnCount = 1;
+      // 控制抽牌顺序：杀（触发亚撒西）→ 桃（转2orange）→ 桃（再转2orange）→ 杀（限一次后正常入手）
+      const seq = [
+        { defId: 'sha', suit: '♠', number: 7 },
+        { defId: 'tao', suit: '♥', number: 4 },
+        { defId: 'tao', suit: '♥', number: 5 },
+        { defId: 'sha', suit: '♠', number: 9 },
+      ];
+      g6.drawCard = () => seq.shift() || null;
+      qiu.hand.length = 0;
+      await g6.drawCards(qiu, 1); // 抽1张杀 → 亚撒西弃置改抽2 → 两张桃各转2orange
+      if (qiu.hand.length !== 0) throw new Error('亚撒西替换抽牌后不应有手牌，实际 ' + qiu.hand.length);
+      if (qiu.oranges !== 4) throw new Error('两张桃应转化4个orange，实际 ' + qiu.oranges);
+      // 亚撒西每回合限一次：再抽杀应直接入手
+      await g6.drawCards(qiu, 1);
+      if (qiu.hand.filter(c => c.defId === 'sha').length !== 1) throw new Error('亚撒西本回合不应再触发');
+      // 回合开始 +1 orange，主动使用回血
+      await g6.emit('turnStart', { player: qiu });
+      if (qiu.oranges !== 5) throw new Error('回合开始应+1 orange');
+      qiu.hp = 2;
+      await QYS.data.skills.sk_orange.exec(g6, qiu); // stub chooseTargets 返回第一个候选（自己）
+      if (qiu.oranges !== 4 || qiu.hp !== 3) throw new Error('orange 使用应-1计数且回1血');
+      console.log('orange/亚撒西检查 ✓（转化/限次/回合获得/使用回血）');
     }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

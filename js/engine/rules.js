@@ -27,7 +27,9 @@ QYS.rules = {};
     if (game.isLocked(p)) return null; // 小学生战争：主动技封印（被动仍生效）
     for (const id of p.skillIds) {
       const sk = QYS.data.skills[id];
-      if (sk && sk.type === 'active' && !p.turn.skillUsed && (!sk.canUse || sk.canUse(game, p))) return sk;
+      // freq 未声明或非 oncePerTurn 的主动技不占每回合一次的名额（如 orange 可连续使用）
+      const usable = sk.freq === 'oncePerTurn' ? !p.turn.skillUsed : true;
+      if (sk && sk.type === 'active' && usable && (!sk.canUse || sk.canUse(game, p))) return sk;
     }
     return null;
   }
@@ -45,7 +47,7 @@ QYS.rules = {};
     const sk = activeSkill(game, p);
     if (!sk) return;
     const ok = await sk.exec(game, p);
-    if (ok) p.turn.skillUsed = true;
+    if (ok && sk.freq === 'oncePerTurn') p.turn.skillUsed = true;
   }
 
   async function playCard(game, user, card, targets) {
