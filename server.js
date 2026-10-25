@@ -76,6 +76,7 @@ function newRoom() {
     hostSeat: 0,
     playerCount: 5,
     started: false,
+    gameSeq: 0,             // 对局编号（递增；客户端据此识别换局）
     disconnected: new Set(), // 掉线座位，其提问按机器人默认作答
     rush: new Set(),         // 抢主公的座位（每次开局后清空）
     game: null,
@@ -108,7 +109,9 @@ function broadcastLobby(room) {
 function sendState(conn) {
   const room = roomOf(conn);
   if (!room || !room.game) return;
-  conn.send({ t: 'state', snap: QYS.core.snapshot(room.game, room.started ? room.conns.get(conn) : null) });
+  const snap = QYS.core.snapshot(room.game, room.started ? room.conns.get(conn) : null);
+  snap.gameId = room.gameSeq; // 客户端据此识别新一局（重新弹身份层）
+  conn.send({ t: 'state', snap });
 }
 function broadcastStates(room) { for (const conn of room.conns.keys()) sendState(conn); }
 
@@ -118,10 +121,12 @@ function mapCard(p, v) {
   return p.hand.find(c => c.defId === v.defId && c.suit === v.suit && c.number === v.number) || null;
 }
 
-// 远端玩家的问答适配器：把引擎提问转发给浏览器，等待点击回答
+// 远端玩家的问答适配器：把引擎提问转发给浏览器，等待点击回答。
+// 所有应答在服务端按引擎给定的 filter/candidates 校验——客户端不可信。
 function netIoFor(room, conn, seat) {
+  const mySeq = room.gameSeq; // 换局守卫：此提问属于的局编号（gameSeq 在 createGame 前已递增）
   const ask = (method, args) => new Promise(resolve => {
-    if (room.disconnected.has(seat)) return resolve(null);
+    if (room.disconnected.has(seat) || room.gameSeq !== mySeq) return resolve(null);
     const id = 'a' + (++room.askSeq);
     const timer = setTimeout(() => {
       if (conn.pending[id]) {
@@ -136,7 +141,13 @@ function netIoFor(room, conn, seat) {
   return {
     async chooseCard(p, opts = {}) {
       const v = await ask('chooseCard', { tag: opts.tag || '', hint: opts.hint || '', cancelText: opts.cancelText });
-      return mapCard(p, v);
+      const card = mapCard(p, v);
+      // 服务端执行引擎的 filter（防客户端发来不合法的牌，如把无懈当闪）
+      if (card && opts.filter && !opts.filter(card)) {
+        console.log(`[${room.code}] 座位 ${seat + 1} 的选牌未通过校验，按放弃处理`);
+        return null;
+      }
+      return card;
     },
     async chooseBool(p, opts = {}) { return !!(await ask('chooseBool', { hint: opts.hint || '', cancelText: opts.cancelText })); },
     async chooseTargets(p, opts = {}) {
@@ -145,7 +156,10 @@ function netIoFor(room, conn, seat) {
         min: opts.min, max: opts.max, hint: opts.hint || '',
       });
       if (!Array.isArray(v)) return null;
-      const players = v.map(s => room.game.players[s]).filter(Boolean);
+      const candSet = new Set((opts.candidates || []).map(c => c.seat));
+      const seats = v.filter(s => candSet.has(s)).slice(0, opts.max || v.length);
+      if (!seats.length) return null;
+      const players = seats.map(s => room.game.players[s]).filter(Boolean);
       return players.length ? players : null;
     },
     async askPlay(p, opts = {}) {
@@ -156,7 +170,10 @@ function netIoFor(room, conn, seat) {
       if (!v) return { type: 'end' };
       if (v.type === 'card' && v.card) {
         const card = mapCard(p, v.card);
-        return card ? { type: 'card', card } : { type: 'end' };
+        if (!card) return { type: 'end' };
+        // 出的牌必须在本阶段可玩列表内
+        const ok = (opts.playable || []).some(it => it.card === card);
+        return ok ? { type: 'card', card } : { type: 'end' };
       }
       return v;
     },
@@ -171,6 +188,7 @@ function startGame(room, playerCount) {
   room.started = true;
   room.playerCount = playerCount;
   room.disconnected.clear();
+  room.gameSeq++;
   // 抢主公结算：抢者中随机定主公；没人抢则全员随机
   const live = new Set(room.conns.values());
   const rushSeats = [...room.rush].filter(s => s < playerCount && live.has(s));

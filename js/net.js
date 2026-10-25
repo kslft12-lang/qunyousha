@@ -7,6 +7,7 @@ QYS.net = {};
 
 (function () {
   let ws = null, mySeat = null, roomCode = null, splashDone = false, overShown = false, view = null;
+  let lastGameId = null;
   const askQueue = [];
   let busy = false;
 
@@ -80,6 +81,13 @@ QYS.net = {};
   }
 
   function onState(snap) {
+    // 换局识别：gameId 变化 = 新一局开始（重置弹层状态）
+    if (snap.gameId !== undefined && snap.gameId !== lastGameId) {
+      lastGameId = snap.gameId;
+      overShown = false;
+      splashDone = false;
+      view.game = null;
+    }
     const first = !view.game;
     view.attach(snap, true);
     hide('startScreen');
