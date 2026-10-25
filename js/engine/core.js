@@ -80,6 +80,7 @@ QYS.core = QYS.core || {};
     game.over = false;
     game.winner = null;
     game.warLock = null; // 小学生战争：{a, b} 被锁的双方
+    game.toilet = null;  // 一起上厕所：{a, b} 距离强制为1的双方（a 为发动者）
     game.view = null; // 由界面层注入 { render() }
 
     // 小学生战争生效中：p 是被锁的一方（只能用/打出【杀】【闪】）
@@ -183,6 +184,8 @@ QYS.core = QYS.core || {};
     // ---- 距离与范围 ----
     // 环距离在"存活玩家环"上计算：阵亡者离场、座位收拢（三国杀规则）
     game.distance = (a, b) => {
+      // 一起上厕所：双方距离互相强制为 1（无视实际环距与坐骑）
+      if (game.toilet && ((game.toilet.a === a && game.toilet.b === b) || (game.toilet.a === b && game.toilet.b === a))) return 1;
       const alive = game.players.filter(p => p.alive);
       const n = alive.length;
       const ia = alive.indexOf(a), ib = alive.indexOf(b);
@@ -363,6 +366,7 @@ QYS.core = QYS.core || {};
       t.alive = false;
       t.revealed = true;
       if (game.warLock && game.warLock.a === t) game.warLock = null; // 发动者死亡，小学生战争提前结束
+      if (game.toilet && (game.toilet.a === t || game.toilet.b === t)) game.toilet = null; // 任一方死亡，一起上厕所结束
       dropAll(t);
       game.log(`${t.name} 阵亡，身份是【${ID_NAME[t.identity]}】`, 'system');
       if (t.seat === game.humanSeat) game.log('你已阵亡，进入观战模式', 'system');
@@ -439,6 +443,7 @@ QYS.core = QYS.core || {};
         identity: (p.revealed || game.over || p.seat === seat) ? p.identity : null,
         skillIds: p.skillIds,
         oranges: p.oranges || 0,
+        toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
         locked: game.isLocked(p),
         handCount: p.hand.length,
         hand: p.seat === seat ? p.hand.map(c => ({ ...c })) : undefined,

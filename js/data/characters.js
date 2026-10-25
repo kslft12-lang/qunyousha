@@ -162,6 +162,51 @@ QYS.data.skills = {
     desc: '每回合限一次，你抽到【杀】时将之弃置，改为摸两张牌。',
   },
 
+  // 【一起上厕所】：出牌阶段限一次，选择一名其他角色：直到自己的下回合开始，
+  // 双方距离互相强制为 1（无视实际环距与坐骑；与其他人距离正常计算）。
+  sk_toilet: {
+    name: '一起上厕所',
+    type: 'active',
+    freq: 'oncePerTurn',
+    desc: '出牌阶段限一次，你可以选择一名其他角色与你一起上厕所：直到你的下回合开始，你与其的距离互相强制为1（无视实际距离与坐骑，与其他角色的距离仍正常计算）。',
+    canUse(game, p) { return game.othersAlive(p).length > 0; },
+    async exec(game, p) {
+      const sel = await game.askTargets(p, {
+        candidates: game.othersAlive(p), min: 1, max: 1,
+        hint: '【一起上厕所】：选择一起上厕所的角色（你们的距离将强制为1）',
+      });
+      if (!sel || !sel.length) return false;
+      const t = sel[0];
+      game.toilet = { a: p, b: t };
+      game.log(`${p.name} 拉着 ${t.name} 一起上厕所！你们二人的距离强制为 1`, 'skill');
+      // 上厕所要脱裤子：夺其防具入手（需同时拥有该技能）
+      if (game.hasSkill(p, 'sk_tuokuzi') && t.equips.armor) {
+        const armor = t.equips.armor;
+        t.equips.armor = null;
+        p.hand.push(armor);
+        game.log(`${t.name} 上厕所要脱裤子，【${QYS.def(armor).name}】被 ${p.name} 拿走了`, 'skill');
+      }
+      game.update();
+      return true;
+    },
+    hooks: {
+      // 自己的下回合开始：结束一起上厕所
+      async turnStart(game, p, payload) {
+        if (payload.player === p && game.toilet && game.toilet.a === p) {
+          game.toilet = null;
+          game.log('一起上厕所结束，距离恢复正常', 'system');
+        }
+      },
+    },
+  },
+
+  // 【上厕所要脱裤子】：与【一起上厕所】联动：一起上厕所的对象其装备栏中的防具放入你的手牌（坐骑和武器不算防具）。
+  sk_tuokuzi: {
+    name: '上厕所要脱裤子',
+    type: 'trigger',
+    desc: '被你用【一起上厕所】选中的对象，其装备栏中的防具将放入你的手牌中（坐骑和武器不是防具）。',
+  },
+
   // 【凑凑的捣乱狂】：回合开始时，可将任意两名角色（含自己）的手牌全部洗混后随机分配回两人。
   sk_daoluan: {
     name: '凑凑的捣乱狂',
@@ -198,4 +243,6 @@ QYS.data.characters = [
   { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
   // TODO: 秋秋人头像待补 assets/characters/qiuqiu.png（当前显示首字圆徽）
   { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
+  // TODO: 颜文字小变态头像待补 assets/characters/yanwenzi.png（当前显示首字圆徽）
+  { id: 'yanwenzi', name: '颜文字小变态', title: '群友', hp: 4, skills: ['sk_toilet', 'sk_tuokuzi'] },
 ];

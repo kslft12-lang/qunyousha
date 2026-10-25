@@ -150,7 +150,7 @@ QYS.rules = {};
   async function turn(game, p) {
     game.turnCount++;
     p.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
-    if (game.warLock && game.warLock.a === p) game.warLock = null; // 下一次轮到自己，小学生战争结束
+    if (game.warLock && game.warLock.a === p) game.warLock = null; // 下一次轮到自己，小学生战争结束（一起上厕所的解除在其技能钩子内）
     game.phase = '回合开始';
     const who = p.seat === game.humanSeat ? '（你）' : '';
     game.log(`── 第 ${game.turnCount} 回合：${p.name}${who} ──`, 'turn');

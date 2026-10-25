@@ -143,5 +143,30 @@ async function play(n) {
       if (qiu.oranges !== 4 || qiu.hp !== 3) throw new Error('orange 使用应-1计数且回1血');
       console.log('orange/亚撒西检查 ✓（转化/限次/回合获得/使用回血）');
     }
+
+    // 一起上厕所检查：距离强制1（双向、无视坐骑）、第三者正常、下回合解除、脱裤子夺防具
+    {
+      const io7 = () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets(p, o) { return [o.candidates[1] || o.candidates[0]]; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
+      const g7 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['变', '甲', '乙', '丙', '丁'], ioFor: io7 });
+      const me = g7.players[0], far = g7.players[2], other = g7.players[1];
+      me.skillIds = ['sk_toilet', 'sk_tuokuzi'];
+      me.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+      if (g7.distance(me, far) !== 2) throw new Error('初始距离应为2');
+      far.equips.horsePlus = { defId: 'ma_def', suit: '♥', number: 3 }; // +1马 → 距离3
+      if (g7.distance(me, far) !== 3) throw new Error('+1马后距离应为3');
+      // 目标穿防具，一起上厕所 → 距离强制1 且防具被夺
+      far.equips.armor = { defId: 'bagua', suit: '♠', number: 11 };
+      const okExec = await QYS.data.skills.sk_toilet.exec(g7, me);
+      if (!okExec) throw new Error('一起上厕所应发动成功');
+      if (g7.distance(me, far) !== 1 || g7.distance(far, me) !== 1) throw new Error('上厕所双方距离应强制为1');
+      if (g7.distance(me, other) !== 1) throw new Error('与第三者距离应正常');
+      if (far.equips.armor !== null) throw new Error('目标防具应被夺走');
+      if (!me.hand.some(c => c.defId === 'bagua')) throw new Error('防具应进入发动者手牌');
+      // 发动者下回合开始解除
+      g7.emit('turnStart', { player: me });
+      if (g7.toilet !== null) throw new Error('下回合开始应解除');
+      if (g7.distance(me, far) !== 3) throw new Error('解除后距离应恢复（含+1马为3）');
+      console.log('一起上厕所检查 ✓（强制距离1/夺防具/下回合解除）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });
