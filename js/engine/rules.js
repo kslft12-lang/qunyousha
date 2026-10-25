@@ -127,14 +127,16 @@ QYS.rules = {};
   }
 
   async function discardPhase(game, p) {
-    while (!game.over && p.alive && p.hand.length > p.hp) {
+    // 小笼包：手牌上限-1（最低 0）
+    const limit = game.hasSkill(p, 'sk_xiaolongbao') ? Math.max(0, p.hp - 1) : p.hp;
+    while (!game.over && p.alive && p.hand.length > limit) {
       const c = await game.askCard(p, {
         filter: () => true, tag: '弃牌',
-        hint: `弃牌阶段：请弃置手牌（还需 ${p.hand.length - p.hp} 张）`, cancelText: '随机弃一张',
+        hint: `弃牌阶段：请弃置手牌（上限 ${limit}，还需 ${p.hand.length - limit} 张）`, cancelText: '随机弃一张',
       });
       if (c && p.hand.includes(c)) {
         game.discardFromHand(p, c);
-      } else if (p.hand.length > p.hp) {
+      } else if (p.hand.length > limit) {
         const r = p.hand[(Math.random() * p.hand.length) | 0];
         game.discardFromHand(p, r);
         game.log(`${p.name} 随机弃置了${QYS.cardLabel(r)}`, 'system');
@@ -158,7 +160,7 @@ QYS.rules = {};
       game.phase = ph;
       await game.emit('phaseStart', { player: p, phase: ph });
       if (ph === '判定') await judgePhase(game, p);
-      else if (ph === '摸牌') await game.drawCards(p, 2);
+      else if (ph === '摸牌') await game.drawCards(p, game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2);
       else if (ph === '出牌') {
         if (p.turn.skipPlay) game.log(`${p.name} 跳过出牌阶段`, 'system');
         else await playPhase(game, p);

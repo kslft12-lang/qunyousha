@@ -49,7 +49,10 @@ QYS.core = QYS.core || {};
     game.lordSeat = lordSeat;
     game.identityCounts = { 主: 0, 忠: 0, 反: 0, 内: 0 };
     finalIds.forEach(id => { game.identityCounts[id]++; });
-    const chars = shuffle([...QYS.data.characters]);
+    // 角色分配：除路人群友外每局不重复；人数超出角色池时以路人群友补位
+    const uniqueChars = shuffle(QYS.data.characters.filter(c => c.id !== 'luren'));
+    const luren = QYS.data.characters.find(c => c.id === 'luren');
+    const chars = Array.from({ length: playerCount }, (_, s) => uniqueChars[s] || luren);
 
     game.players = finalIds.map((identity, seat) => {
       const ch = chars[seat % chars.length];

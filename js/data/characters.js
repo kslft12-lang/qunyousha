@@ -77,14 +77,81 @@ QYS.data.skills = {
     type: 'trigger',
     desc: '当你需要使用或打出【闪】时，你可以选择场上任一其他角色替你打出【闪】；若其没有【闪】可打出，其失去1点体力。',
   },
+
+  // 【豆沙包】：主公技。回合开始时可命令一名角色对另一名角色使用一张【杀】（强制执行；目标可闪避）。
+  // TODO(规则): 强制使用不检查攻击范围（简化）
+  sk_doushabao: {
+    name: '豆沙包',
+    type: 'trigger',
+    desc: '主公技。回合开始时，你可以命令一名角色对另一名角色使用一张【杀】（其必须执行；目标可以打出【闪】躲避）。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p || p.identity !== '主') return;
+        const cands = game.alive();
+        if (cands.length < 2) return;
+        if (!(await game.askBool(p, '是否发动【豆沙包】？命令一名角色对另一名角色使用【杀】', { tag: '技能' }))) return;
+        const a = await game.askTargets(p, { candidates: cands, min: 1, max: 1, hint: '【豆沙包】：选择执行命令的角色' });
+        if (!a || !a.length) return;
+        const src = a[0];
+        const tCands = game.othersAlive(src);
+        if (!tCands.length) return;
+        const b = await game.askTargets(p, { candidates: tCands, min: 1, max: 1, hint: `【豆沙包】：${src.name} 对谁使用【杀】？` });
+        if (!b || !b.length) return;
+        const tgt = b[0];
+        game.log(`${p.name} 发动【豆沙包】，命令 ${src.name} 对 ${tgt.name} 使用【杀】`, 'skill');
+        const sha = src.hand.find(c => QYS.def(c).id === 'sha');
+        if (sha) {
+          game.discardFromHand(src, sha, '使用');
+          game.log(`${src.name} 被迫使用${QYS.cardLabel(sha)}`, 'use');
+          await game.shaResolve(src, tgt, 0);
+        } else {
+          game.log(`${src.name} 没有【杀】，命令落空`, 'system');
+        }
+        game.update();
+      },
+    },
+  },
+
+  // 【小笼包】：手牌上限-1，摸牌阶段摸牌数+1。实现在 rules.js 的摸牌/弃牌阶段。
+  sk_xiaolongbao: {
+    name: '小笼包',
+    type: 'trigger',
+    desc: '锁定技。你的手牌上限-1，摸牌阶段摸牌数+1。',
+  },
+
+  // 【凑凑的捣乱狂】：回合开始时，可将任意两名角色（含自己）的手牌全部洗混后随机分配回两人。
+  sk_daoluan: {
+    name: '凑凑的捣乱狂',
+    type: 'trigger',
+    desc: '回合开始时，你可以选择任意两名角色（包括自己），将两人的所有手牌洗混后随机分配回这两个人手中。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        const cands = game.alive();
+        if (cands.length < 2) return;
+        if (!(await game.askBool(p, '是否发动【凑凑的捣乱狂】？将两名角色的手牌洗混随机分配', { tag: '技能' }))) return;
+        const sel = await game.askTargets(p, { candidates: cands, min: 2, max: 2, hint: '【凑凑的捣乱狂】：选择两名角色（可含自己）' });
+        if (!sel || sel.length !== 2) return;
+        const [x, y] = sel;
+        const pool = [...x.hand.splice(0), ...y.hand.splice(0)];
+        QYS.util.shuffle(pool);
+        for (const c of pool) (Math.random() < 0.5 ? x : y).hand.push(c);
+        game.log(`${p.name} 发动【凑凑的捣乱狂】，${x.name} 与 ${y.name} 的手牌被洗混随机分配`, 'skill');
+        game.update();
+      },
+    },
+  },
 };
 
 QYS.data.characters = [
-  // TODO: 路人群友为测试用白板武将
+  // TODO: 路人群友为测试用白板武将（人数超出角色池时以其补位，允许重复）
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
+  // TODO: 包子大王 / 00的画 头像待放入 assets/characters/baozi.png 与 hua00.png（当前显示首字圆徽）
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
+  { id: 'baozi', name: '包子大王', title: '群友', hp: 4, skills: ['sk_doushabao', 'sk_xiaolongbao'] },
+  { id: 'hua00', name: '00的画', title: '群友', hp: 4, skills: ['sk_daoluan'] },
 ];

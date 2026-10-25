@@ -77,5 +77,16 @@ async function play(n) {
       if (g2.distance(p0, g2.players[4]) !== 1) throw new Error('甲-戊在存活环上应相邻');
       console.log('阵亡离场距离检查 ✓（座位收拢）');
     }
+
+    // 角色唯一性检查：除路人群友外每局不重复
+    {
+      const g3 = QYS.core.createGame({ playerCount: 8, humanSeat: null, lordSeat: 0, ioFor: io });
+      const ids = g3.players.map(p => p.charId);
+      const nonLuren = ids.filter(id => id !== 'luren');
+      if (new Set(nonLuren).size !== nonLuren.length) throw new Error('非路人群友角色出现重复：' + ids.join(','));
+      const g4 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, ioFor: io });
+      if (new Set(g4.players.map(p => p.charId)).size !== 5) throw new Error('5人局角色重复');
+      console.log('角色唯一性检查 ✓（仅路人群友可重复补位）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });
