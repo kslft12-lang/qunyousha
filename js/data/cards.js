@@ -129,7 +129,7 @@ QYS.data.cards = [
       for (const t of g.aoeOrder(user)) {
         if (g.over || !t.alive) return;
         if (await g.askWuxie({ user, card, target: t })) continue;
-        if (!(await g.dodgeCheck(t))) await g.damage({ source: user, target: t, amount: 1, tag: '万箭齐发' });
+        if (!(await g.dodgeCheck(t, 'wanjian'))) await g.damage({ source: user, target: t, amount: 1, tag: '万箭齐发' });
       }
     },
   },

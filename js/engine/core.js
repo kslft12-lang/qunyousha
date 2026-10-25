@@ -80,6 +80,7 @@ QYS.core = QYS.core || {};
 
     // 小学生战争生效中：p 是被锁的一方（只能用/打出【杀】【闪】）
     game.isLocked = p => !!(game.warLock && (game.warLock.a === p || game.warLock.b === p));
+    game.hasSkill = (p, id) => (p.skillIds || []).includes(id);
 
     // ---- 日志 / 刷新 ----
     game.log = (text, type = 'system') => {
@@ -187,9 +188,9 @@ QYS.core = QYS.core || {};
       if (!opts.candidates.length || !p.io) return null;
       return p.io.chooseTargets(p, opts);
     };
-    game.askResponse = (p, name) => game.askCard(p, {
+    game.askResponse = (p, name, hint) => game.askCard(p, {
       filter: c => QYS.def(c).name === name, tag: name,
-      hint: `请打出【${name}】`, cancelText: '放弃',
+      hint: hint || `请打出【${name}】`, cancelText: '放弃',
     });
 
     // 无懈可击抵消链：依次询问持有者，链长上限 3 防死循环
@@ -217,14 +218,51 @@ QYS.core = QYS.core || {};
     };
 
     // ---- 战斗结算 ----
-    // 闪避判定：先问八卦阵，再问【闪】。被【杀】与【万箭齐发】共用。
-    game.dodgeCheck = async target => {
+    // 闪避判定：八卦阵 → 【闪】 → 被动技能（一几一几仅被杀指定、万人迷任意场合）。被【杀】与【万箭齐发】共用。
+    // cause: 'sha' 被杀指定为目标 | 'wanjian' 万箭齐发
+    game.dodgeCheck = async (target, cause = 'sha') => {
       if (target.equips.armor?.id === 'bagua' && await game.askBool(target, '是否发动【八卦阵】？', { tag: '八卦' })) {
         const j = game.judge(target, '八卦阵');
         if (j.color === 'red') { game.log(`八卦阵判定为红色，视为打出【闪】`, 'use'); game.update(); return true; }
       }
       const shan = await game.askResponse(target, '闪');
       if (shan) { game.discardFromHand(target, shan, '打出'); game.log(`${target.name} 打出了【闪】`, 'use'); game.update(); return true; }
+
+      // 【一几一几】：仅被【杀】指定为目标时可把任意手牌当【闪】（万箭齐发、被万人迷选中代打均不触发）
+      if (game.hasSkill(target, 'sk_yijiyiji') && cause === 'sha' && target.hand.length) {
+        if (await game.askBool(target, '是否发动【一几一几】？将任意一张手牌当作【闪】打出', { tag: '技能' })) {
+          const card = await game.askCard(target, { filter: () => true, tag: '技能', hint: '【一几一几】：选择一张手牌当作【闪】打出' });
+          if (card && target.hand.includes(card)) {
+            game.discardFromHand(target, card, '打出');
+            game.log(`${target.name} 发动【一几一几】，将${QYS.cardLabel(card)}当作【闪】打出`, 'skill');
+            game.update();
+            return true;
+          }
+        }
+      }
+
+      // 【万人迷】：场上任一其他角色替打【闪】；其无闪则失去1点体力（且本次仍视为未闪避）
+      if (game.hasSkill(target, 'sk_wanrenmi')) {
+        const cands = game.alive().filter(q => q !== target);
+        if (cands.length && await game.askBool(target, '是否发动【万人迷】？选择一名角色替你打出【闪】，若其没有【闪】则其失去1点体力', { tag: '技能' })) {
+          const sel = await game.askTargets(target, { candidates: cands, min: 1, max: 1, hint: '【万人迷】：选择替你打出【闪】的角色' });
+          const helper = sel && sel[0];
+          if (helper) {
+            game.log(`${target.name} 发动【万人迷】，指定 ${helper.name} 替其打出【闪】`, 'skill');
+            game.update();
+            // 直接询问【闪】：helper 自己的一几一几在此场合不触发
+            const helperShan = await game.askResponse(helper, '闪', `替 ${target.name} 打出【闪】？（【万人迷】）`);
+            if (helperShan && helper.hand.includes(helperShan)) {
+              game.discardFromHand(helper, helperShan, '打出');
+              game.log(`${helper.name} 替 ${target.name} 打出了【闪】`, 'use');
+              game.update();
+              return true;
+            }
+            game.log(`${helper.name} 没有【闪】可打出`, 'system');
+            await game.loseHp(helper, 1, '万人迷');
+          }
+        }
+      }
       return false;
     };
     game.shaResolve = async (source, target, bonus = 0) => {
@@ -251,6 +289,15 @@ QYS.core = QYS.core || {};
       t.hp = Math.min(t.hp + n, t.maxHp);
       game.log(`${t.name} 回复了 ${n} 点体力${source && source !== t ? `（来自 ${source.name}）` : ''}`, 'heal');
       game.update();
+    };
+
+    // 体力流失（非伤害，不触发受伤相关技能）：万人迷罚体力等场合使用
+    game.loseHp = async (t, n = 1, reason = '') => {
+      if (game.over || !t || !t.alive || n <= 0) return;
+      t.hp -= n;
+      game.log(`${t.name} 失去了 ${n} 点体力${reason ? `（${reason}）` : ''}`, 'damage');
+      game.update();
+      if (t.hp <= 0) await game.dying(t, null);
     };
 
     game.dying = async (t, source) => {
