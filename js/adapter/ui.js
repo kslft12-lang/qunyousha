@@ -11,7 +11,7 @@ QYS.ui.create = function (root) {
   const ID_CLS = { 主: 'lord', 忠: 'loyal', 反: 'rebel', 内: 'spy' };
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
 
-  const view = { game: null, state: null, splashResolve: null, pinnedKey: null };
+  const view = { game: null, state: null, splashResolve: null, pinnedKey: null, discExpanded: false };
 
   root.innerHTML = `
     <div id="gameScreen" hidden>
@@ -170,8 +170,10 @@ QYS.ui.create = function (root) {
     idStats.innerHTML = !g.over && ic
       ? ['忠', '反', '内'].map(k => `<span class="chip statChip">${QYS.core.ID_NAME[k]}×${ic[k] || 0}</span>`).join('')
       : '';
-    // 右下角：统一弃牌堆——所有人的使用/弃置记录，点卡固定查看详情
-    discardCorner.innerHTML = `<div class="dcTitle">弃牌堆 ${entries.length}</div><div class="dcRow">${entries.map(e => faceHtml(e.card, `data-by="${e.by}" data-via="${e.via}"`, 'disc')).join('') || '<span class="dcEmpty">暂无弃牌</span>'}</div>`;
+    // 右下角：统一弃牌堆（默认折叠，点标题展开），展开后点卡固定查看详情
+    discardCorner.innerHTML = view.discExpanded
+      ? `<div class="dcTitle dcToggle">弃牌堆 ${entries.length} <span class="dcArrow">▾ 收起</span></div><div class="dcRow">${entries.map(e => faceHtml(e.card, `data-by="${e.by}" data-via="${e.via}"`, 'disc')).join('') || '<span class="dcEmpty">暂无弃牌</span>'}</div>`
+      : `<div class="dcTitle dcToggle">弃牌堆 <span class="dcCount">${entries.length}</span> <span class="dcArrow">▸ 展开</span></div>`;
 
     const me = g.humanSeat != null ? g.players[g.humanSeat] : null;
     if (me) {
@@ -274,6 +276,8 @@ QYS.ui.create = function (root) {
   root.addEventListener('click', e => {
     const actBtn = e.target.closest('[data-act]');
     if (actBtn) { handleAction(actBtn.dataset.act); return; }
+    // 弃牌堆标题：展开/收起
+    if (e.target.closest('.dcToggle')) { view.discExpanded = !view.discExpanded; render(); return; }
     // 弃牌堆卡牌：点击固定详情（再点同一张取消），点其他位置取消固定
     const discCard = e.target.closest('#discardCorner [data-defid]');
     if (discCard) {
@@ -331,6 +335,7 @@ QYS.ui.create = function (root) {
   view.attach = (g, remote = false) => {
     view.game = g;
     view.pinnedKey = null;
+    view.discExpanded = false;
     cardDetail.hidden = true;
     if (!remote) g.view = view;
     gameScreen.hidden = false;

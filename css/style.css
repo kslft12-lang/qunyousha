@@ -407,6 +407,10 @@ button { font-family: inherit; cursor: pointer; }
   padding: 8px 10px;
 }
 .dcTitle { font-size: 11px; color: var(--gold); margin-bottom: 6px; letter-spacing: .1em; }
+.dcToggle { cursor: pointer; white-space: nowrap; }
+.dcToggle:hover .dcArrow { color: var(--gold-hi); }
+.dcArrow { color: var(--dim); font-size: 10px; margin-left: 4px; }
+.dcCount { color: var(--paper); font-weight: bold; }
 .dcRow { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; }
 .dcEmpty { font-size: 11px; color: var(--dim); }
 .pinNote { font-size: 10px; color: var(--dim); margin-top: 6px; }
