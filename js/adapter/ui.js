@@ -31,6 +31,9 @@ QYS.ui.create = function (root) {
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
 
   const view = { game: null, state: null, splashResolve: null, pinnedKey: null, discExpanded: false };
+  // 触屏（无悬浮）：浏览器点按会先合成 mouseover——若照常弹卡牌详情，抽屉会盖住操作区/目标，点按被吞。
+  // 触屏改为"点按固定查看"：不可用/未选中态点手牌、点技能标签 → 固定详情；再点其他位置取消。
+  const isTouch = !!(window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches);
 
   root.innerHTML = `
     <div id="gameScreen" hidden>
@@ -314,7 +317,19 @@ QYS.ui.create = function (root) {
     const st = view.state;
     if (!card || !st) return;
     if (st.mode === 'play' && st.playableKeys.has(cardKey(card))) resolveSt({ type: 'card', card });
-    else if (st.mode === 'chooseCard' && st.filter(card)) resolveSt(card);
+    else if ((st?.mode === 'chooseCard') && st.filter(card)) resolveSt(card);
+    else if (isTouch) pinCardDetail(card); // 触屏点了当前不可用的手牌：固定查看这张牌的说明
+  }
+
+  // 固定展示一张手牌的详情（触屏信息入口）
+  function pinCardDetail(card) {
+    const tmp = document.createElement('div');
+    tmp.dataset.defid = card.defId; tmp.dataset.suit = card.suit; tmp.dataset.num = card.number;
+    const html = detailHtml(tmp);
+    if (!html) return;
+    view.pinnedKey = 'hand:' + cardKey(card);
+    cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
+    cardDetail.hidden = false;
   }
 
   function handleSeatClick(seat) {
@@ -350,6 +365,19 @@ QYS.ui.create = function (root) {
       }
       return;
     }
+    // 技能标签：触屏点按固定查看说明（桌面悬浮已有）；点击标签不应冒泡成选人
+    const skEl = e.target.closest('.chip.skChip');
+    if (skEl) {
+      if (isTouch && skEl.dataset.skill) {
+        const html = detailHtml(skEl);
+        if (html) {
+          view.pinnedKey = detailKey(skEl);
+          cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
+          cardDetail.hidden = false;
+        }
+      }
+      return;
+    }
     if (view.pinnedKey) { view.pinnedKey = null; cardDetail.hidden = true; }
     const cardEl = e.target.closest('[data-card-idx]');
     if (cardEl) { handleCardClick(+cardEl.dataset.cardIdx); return; }
@@ -380,6 +408,7 @@ QYS.ui.create = function (root) {
   const detailKey = el => [el.dataset.defid, el.dataset.suit, el.dataset.num, el.dataset.by, el.dataset.via, el.dataset.skill].join('|');
 
   root.addEventListener('mouseover', e => {
+    if (isTouch) return; // 触屏无悬浮：详情走点按固定，合成 mouseover 一律忽略
     if (view.pinnedKey) return; // 已固定详情时忽略悬浮
     const el = e.target.closest('[data-defid],[data-skill]');
     if (!el) { cardDetail.hidden = true; return; }
@@ -389,11 +418,16 @@ QYS.ui.create = function (root) {
     cardDetail.hidden = false;
   });
 
-  // 窗口尺寸变化（含手机旋转）后重算椭圆布局
-  let rsTimer = null;
+  // 窗口尺寸变化后重算椭圆布局；只看宽度变化——手机浏览器地址栏伸缩只改高度，
+  // 若跟着重渲染会吞掉进行中的点按（innerHTML 重建后 click 丢失）
+  let rsTimer = null, lastW = window.innerWidth;
   window.addEventListener('resize', () => {
     clearTimeout(rsTimer);
-    rsTimer = setTimeout(() => { if (view.game) render(); }, 120);
+    rsTimer = setTimeout(() => {
+      if (Math.abs(window.innerWidth - lastW) < 1) return;
+      lastW = window.innerWidth;
+      if (view.game) render();
+    }, 120);
   });
 
   // ---- 流程弹层 ----

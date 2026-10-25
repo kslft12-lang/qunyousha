@@ -536,12 +536,12 @@ button { font-family: inherit; cursor: pointer; }
   .player { width: 148px; }
 }
 
-/* 触屏：无悬浮，卡牌/技能详情改为底部抽屉（点卡固定、再点取消仍可用） */
+/* 触屏：无悬浮，卡牌/技能详情改为顶部固定抽屉（点按固定、再点取消）——置于顶部，避免盖住手牌区与确定/取消按钮 */
 @media (hover: none), (pointer: coarse) {
   #cardDetail {
     left: 12px; right: 12px; width: auto;
-    bottom: calc(118px + env(safe-area-inset-bottom));
-    max-height: 42vh; overflow-y: auto;
+    top: 46px; bottom: auto;
+    max-height: 36vh; overflow-y: auto;
   }
 }
 
