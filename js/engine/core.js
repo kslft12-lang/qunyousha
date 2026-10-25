@@ -127,9 +127,16 @@ QYS.core = QYS.core || {};
       if (z.zone === 'equip') return { zone: 'equip', slot: z.slot, card: p.equips[z.slot] };
       return { zone: 'judge', index: z.index, card: p.judges[z.index] };
     };
+    // 装备离开装备区统一入口：白银狮子失去时回复 1 点体力
+    game.loseEquip = (p, card) => {
+      if (card && card.defId === 'baiyinshizi' && p.alive && p.hp < p.maxHp) {
+        game.heal(p, 1);
+        game.log(`${p.name} 失去了【白银狮子】，回复 1 点体力`, 'skill');
+      }
+    };
     game.removeZoneCard = (p, pick) => {
       if (pick.zone === 'hand') { const i = p.hand.indexOf(pick.card); if (i >= 0) p.hand.splice(i, 1); }
-      else if (pick.zone === 'equip') p.equips[pick.slot] = null;
+      else if (pick.zone === 'equip') { const c = p.equips[pick.slot]; p.equips[pick.slot] = null; game.loseEquip(p, c); }
       else p.judges.splice(pick.index, 1);
     };
     // 统一弃牌入口：记录来源（谁、因何）供弃牌堆悬浮提示
@@ -293,10 +300,11 @@ QYS.core = QYS.core || {};
 
     // ---- 战斗结算 ----
     // 闪避判定：八卦阵 → 【闪】 → 被动技能（一几一几仅被杀指定、万人迷任意场合）。被【杀】与【万箭齐发】共用。
-    // cause: 'sha' 被杀指定为目标 | 'wanjian' 万箭齐发
-    game.dodgeCheck = async (target, cause = 'sha') => {
+    // cause: 'sha' 被杀指定为目标 | 'wanjian' 万箭齐发；src 为杀/万箭的使用者（青釭剑的杀无视八卦阵）
+    game.dodgeCheck = async (target, cause = 'sha', src = null) => {
       const armorDef = target.equips.armor ? QYS.def(target.equips.armor) : null;
-      if (armorDef?.id === 'bagua' && await game.askBool(target, '是否发动【八卦阵】？', { tag: '八卦' })) {
+      const qg = cause === 'sha' && src && src.equips.weapon && QYS.def(src.equips.weapon).id === 'qinggangjian';
+      if (!qg && armorDef?.id === 'bagua' && await game.askBool(target, '是否发动【八卦阵】？', { tag: '八卦' })) {
         const j = game.judge(target, '八卦阵');
         if (j.color === 'red') { game.log(`八卦阵判定为红色，视为打出【闪】`, 'use'); game.update(); return true; }
       }
@@ -354,34 +362,101 @@ QYS.core = QYS.core || {};
       }
       return false;
     };
+    // 【杀】命中后的结算：伤害 + 麒麟弓弃马 + 太刀杀敌掉级；qg=青釭剑无视防具
+    const shaHit = async (source, target, bonus, qg) => {
+      await game.damage({ source, target, amount: 1 + bonus, tag: '杀', noArmor: !!qg });
+      // 麒麟弓：杀造成伤害后，可弃置目标装备区里的一张坐骑牌
+      const qilin = source && source.alive && source.equips.weapon && QYS.def(source.equips.weapon).id === 'qilingong';
+      if (qilin && (target.equips.horsePlus || target.equips.horseMinus)) {
+        if (await game.askBool(source, `发动【麒麟弓】？弃置 ${target.name} 装备区里的一张坐骑牌`, { tag: '技能' })) {
+          // TODO(规则): 目标有两匹马时应让使用者任选，这里随机弃一
+          const slots = ['horsePlus', 'horseMinus'].filter(s => target.equips[s]);
+          const slot = slots[(Math.random() * slots.length) | 0];
+          const c = target.equips[slot];
+          target.equips[slot] = null;
+          game.toDiscard(c, source, '弃置');
+          game.log(`${source.name} 发动【麒麟弓】，弃置了 ${target.name} 的【${QYS.def(c).name}】`, 'skill');
+          game.update();
+        }
+      }
+      // 太刀高手：以杀杀死敌人 → 跌落一个刃等级
+      if (!target.alive && source && game.hasSkill(source, 'sk_taidao') && source.blade > 0) {
+        source.blade--;
+        game.log(`【太刀高手】${source.name} 以杀毙敌，太刀跌落至 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
+        game.update();
+      }
+      return true;
+    };
+
     // 结算一次【杀】：目标闪避成功返回 false；未闪避（造成伤害）返回 true（灌汤包等技能依此判定）
-    game.shaResolve = async (source, target, bonus = 0) => {
+    // card 传入用于仁王盾（黑色杀）等按牌面判定的防具互动
+    game.shaResolve = async (source, target, bonus = 0, card = null) => {
       if (!target.alive) return false;
+      const armorId = target.equips.armor ? QYS.def(target.equips.armor).id : null;
+      const qg = source && source.equips.weapon && QYS.def(source.equips.weapon).id === 'qinggangjian'; // 青釭剑：杀无视防具
+      // 仁王盾：黑色的【杀】无效
+      if (!qg && armorId === 'renwang' && card && QYS.util.colorOf(card.suit) === 'black') {
+        game.log(`${target.name} 的【仁王盾】令黑色【杀】无效`, 'skill');
+        game.update();
+        return false;
+      }
+      // 藤甲：【杀】无效
+      if (!qg && armorId === 'tengjia') {
+        game.log(`${target.name} 的【藤甲】令【杀】无效`, 'skill');
+        game.update();
+        return false;
+      }
       // 新疆网络：对你使用的【杀】一半概率因"网络波动"自动失效（无需闪避）
       if (game.hasSkill(target, 'sk_xinjiangwang') && Math.random() < 0.5) {
         game.log(`${target.name} 的【新疆网络】波动，${source ? source.name + ' 的' : ''}【杀】自动失效`, 'skill');
         game.update();
         return false;
       }
-      if (!(await game.dodgeCheck(target, 'sha'))) {
-        await game.damage({ source, target, amount: 1 + bonus, tag: '杀' });
-        // 太刀高手：以杀杀死敌人 → 跌落一个刃等级
-        if (!target.alive && source && game.hasSkill(source, 'sk_taidao') && source.blade > 0) {
-          source.blade--;
-          game.log(`【太刀高手】${source.name} 以杀毙敌，太刀跌落至 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
-          game.update();
+      if (!(await game.dodgeCheck(target, 'sha', source))) return shaHit(source, target, bonus, qg);
+      // 贯石斧：杀被【闪】抵消后，可弃置两张手牌令此杀依然生效
+      const gfs = source && source.alive && source.equips.weapon
+        && QYS.def(source.equips.weapon).id === 'guanshifu' && source.hand.length >= 2;
+      if (gfs && await game.askBool(source, `发动【贯石斧】？弃置两张手牌，令对 ${target.name} 的【杀】依然生效`, { tag: '技能' })) {
+        let paid = true;
+        for (let i = 0; i < 2; i++) {
+          const c = await game.askCard(source, {
+            filter: () => true, tag: '弃牌',
+            hint: `【贯石斧】：弃置第 ${i + 1} 张手牌（共需 2 张）`, cancelText: '放弃发动',
+          });
+          if (c && source.hand.includes(c)) game.discardFromHand(source, c, '弃置');
+          else { paid = false; break; }
         }
-        return true;
+        if (paid) {
+          game.log(`${source.name} 发动【贯石斧】，弃置两张手牌令【杀】依然生效`, 'skill');
+          game.update();
+          return shaHit(source, target, bonus, qg);
+        }
       }
       return false;
     };
 
-    game.damage = async ({ source, target, amount = 1, tag }) => {
+    game.damage = async ({ source, target, amount = 1, tag, noArmor = false }) => {
       if (game.over || !target || !target.alive || amount <= 0) return;
       const payload = { source, target, amount, tag };
       await game.emit('beforeDamaged', payload);
       amount = payload.amount;
       if (amount <= 0) return;
+      const armorId = target.equips.armor && !noArmor ? QYS.def(target.equips.armor).id : null;
+      // 白银狮子：锁定技，每次受到的伤害最多 1 点
+      if (armorId === 'baiyinshizi' && amount > 1) {
+        game.log(`${target.name} 的【白银狮子】将 ${amount} 点伤害削减为 1 点`, 'skill');
+        amount = 1;
+      }
+      // 护心镜：受到不小于体力值的伤害时，可弃置之防止此伤害
+      if (armorId === 'huxinjing' && amount >= target.hp
+        && await game.askBool(target, `发动【护心镜】？弃置之，防止这 ${amount} 点伤害（当前体力 ${target.hp}）`, { tag: '技能' })) {
+        const c = target.equips.armor;
+        target.equips.armor = null;
+        game.toDiscard(c, target, '弃置');
+        game.log(`${target.name} 发动【护心镜】，防止了致命伤害`, 'skill');
+        game.update();
+        return;
+      }
       target.hp -= amount;
       game.log(`${target.name} 受到 ${amount} 点${tag ? `【${tag}】` : ''}伤害${source ? `（来自 ${source.name}）` : ''}`, 'damage');
       game.update();

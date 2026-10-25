@@ -361,7 +361,7 @@ async function play(n) {
       const g13 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['菇', '甲', '乙', '丙', '丁'], ioFor: () => io13() });
       const [gu, jia, yi, bing, ding] = g13.players;
       gu.charId = 'mogu'; gu.skillIds = ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang']; // 钉死蘑菇与技能
-      jia.skillIds = []; yi.skillIds = []; bing.skillIds = []; ding.skillIds = [];
+      g13.players.slice(1).forEach(q => { q.charId = 'luren'; q.skillIds = []; }); // 钉死他人（防随机出第二个蘑菇干扰毁灭菇免疫断言）
       g13.players.forEach(q => { q.hand.length = 0; }); // 清手牌控制断言
       const shroomIds = ['mehuogu', 'huimiegu', 'xingbaogu', 'houtougu'];
       // 1) 回合开始：似乎有些触动（无牌可弃 → 额外摸1）+ 蘑菇生长（+1 张蘑菇牌）
@@ -432,6 +432,111 @@ async function play(n) {
       if (!info13.ok || !info13.targets.includes(yi)) throw new Error('隐身角色应可对自己使用杏鲍菇');
       yi.skillIds = [];
       console.log('蘑菇检查 ✓（生长/诅咒塞入·不可选·到期·上厕所移出/魅惑禁攻/毁灭免疫/杏鲍菇回2/猴头菇抽类型/触动弃牌）');
+    }
+
+    // 装备扩展检查：兵粮寸断/仁王盾/藤甲/白银狮子/护心镜/青釭剑/古锭刀/贯石斧/方天画戟/麒麟弓
+    {
+      const mkIo14 = () => ({
+        async chooseCard(p, o) { return p.hand.find(c => (o.filter ? o.filter(c) : true)) || null; },
+        async chooseBool() { return true; },
+        async chooseTargets(p, o) { return o.candidates.slice(0, o.max || 1); },
+        async askPlay() { return { type: 'end' }; }, log() {}, update() {},
+      });
+      const g14 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: () => mkIo14() });
+      const [jia, yi, bing] = g14.players;
+      g14.players.forEach(q => { q.skillIds = []; q.hand.length = 0; });
+      const shaDef14 = QYS.data.cards.find(c => c.id === 'sha');
+      const useSha14 = async (user, tgt, card) => {
+        user.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
+        await shaDef14.effect(g14, { user, targets: [tgt], card });
+      };
+      // 仁王盾：黑杀无效、红杀命中
+      yi.equips.armor = { defId: 'renwang', suit: '♣', number: 2 };
+      await useSha14(jia, yi, { defId: 'sha', suit: '♠', number: 7 });
+      if (yi.hp !== yi.maxHp) throw new Error('仁王盾应令黑色杀无效');
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 7 });
+      if (yi.hp !== yi.maxHp - 1) throw new Error('红杀应正常命中仁王盾');
+      jia.equips.weapon = { defId: 'qinggangjian', suit: '♠', number: 6 };
+      yi.hp = yi.maxHp;
+      await useSha14(jia, yi, { defId: 'sha', suit: '♠', number: 8 });
+      if (yi.hp !== yi.maxHp - 1) throw new Error('青釭剑应无视仁王盾');
+      jia.equips.weapon = null;
+      // 藤甲：杀与南蛮无效、青釭剑穿透
+      yi.equips.armor = { defId: 'tengjia', suit: '♣', number: 2 };
+      yi.hp = yi.maxHp;
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 5 });
+      if (yi.hp !== yi.maxHp) throw new Error('藤甲应令杀无效');
+      const nanman14 = QYS.data.cards.find(c => c.id === 'nanman');
+      await nanman14.effect(g14, { user: jia, targets: [], card: { defId: 'nanman', suit: '♠', number: 7 } });
+      if (yi.hp !== yi.maxHp) throw new Error('藤甲应令南蛮无效');
+      if (bing.hp !== bing.maxHp - 1) throw new Error('南蛮对无藤甲目标应造成伤害');
+      jia.equips.weapon = { defId: 'qinggangjian', suit: '♠', number: 6 };
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 6 });
+      if (yi.hp !== yi.maxHp - 1) throw new Error('青釭剑应穿透藤甲');
+      jia.equips.weapon = null;
+      // 白银狮子：3伤限1、失去回血
+      yi.equips.armor = { defId: 'baiyinshizi', suit: '♣', number: 5 };
+      yi.hp = yi.maxHp;
+      await g14.damage({ source: jia, target: yi, amount: 3, tag: '毁灭菇' });
+      if (yi.hp !== yi.maxHp - 1) throw new Error('白银狮子应将伤害限为1');
+      yi.hp = 1;
+      g14.removeZoneCard(yi, { zone: 'equip', slot: 'armor' });
+      if (yi.hp !== 2 || yi.equips.armor !== null) throw new Error('失去白银狮子应回复1点体力');
+      // 护心镜：致命免伤、非致命不触发
+      yi.equips.armor = { defId: 'huxinjing', suit: '♠', number: 1 };
+      yi.hp = 1;
+      await g14.damage({ source: jia, target: yi, amount: 2, tag: '杀' });
+      if (yi.hp !== 1 || yi.equips.armor !== null) throw new Error('护心镜应防止致命伤害并弃置自身');
+      yi.hp = 4;
+      yi.equips.armor = { defId: 'huxinjing', suit: '♠', number: 2 };
+      await g14.damage({ source: jia, target: yi, amount: 1, tag: '杀' });
+      if (yi.hp !== 3 || yi.equips.armor === null) throw new Error('非致命伤害不应触发护心镜');
+      yi.equips.armor = null;
+      // 古锭刀：已受伤目标伤害+1
+      jia.equips.weapon = { defId: 'gudingdao', suit: '♠', number: 3 };
+      yi.hp = 3;
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 4 });
+      if (yi.hp !== 1) throw new Error('古锭刀对已受伤目标应伤害+1');
+      jia.equips.weapon = null;
+      // 贯石斧：被闪后弃两张手牌强命
+      jia.equips.weapon = { defId: 'guanshifu', suit: '♠', number: 4 };
+      jia.hand.push({ defId: 'tao', suit: '♥', number: 8 }, { defId: 'tao', suit: '♥', number: 9 }); // 供斧弃置
+      yi.hand.push({ defId: 'shan', suit: '♦', number: 2 });
+      yi.hp = 4;
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 8 });
+      if (yi.hp !== 3) throw new Error('贯石斧弃两张应令杀依然生效');
+      if (jia.hand.length !== 0) throw new Error('贯石斧应弃置两张手牌');
+      jia.equips.weapon = null;
+      // 方天画戟：最后手牌的杀至多3目标，多目标各自结算
+      jia.equips.weapon = { defId: 'fangtian', suit: '♠', number: 5 };
+      jia.hand.push({ defId: 'sha', suit: '♥', number: 3 });
+      if (shaDef14.target.max(g14, jia) !== 3) throw new Error('方天画戟最后手牌杀应可指定3目标');
+      jia.hand.push({ defId: 'shan', suit: '♦', number: 3 });
+      if (shaDef14.target.max(g14, jia) !== 1) throw new Error('非最后手牌不应触发方天画戟');
+      jia.hand.length = 0; jia.hand.push({ defId: 'sha', suit: '♥', number: 3 });
+      yi.hp = 4; bing.hp = 4; yi.hand.length = 0; bing.hand.length = 0;
+      jia.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
+      await shaDef14.effect(g14, { user: jia, targets: [yi, bing], card: { defId: 'sha', suit: '♥', number: 3 } });
+      if (yi.hp !== 3 || bing.hp !== 3) throw new Error('方天画戟多目标应各自结算');
+      jia.equips.weapon = null;
+      // 麒麟弓：命中后弃目标坐骑
+      jia.equips.weapon = { defId: 'qilingong', suit: '♠', number: 5 };
+      yi.equips.horsePlus = { defId: 'ma_def', suit: '♥', number: 3 };
+      yi.hp = 4; yi.hand.length = 0;
+      await useSha14(jia, yi, { defId: 'sha', suit: '♥', number: 2 });
+      if (yi.equips.horsePlus !== null) throw new Error('麒麟弓应弃置目标坐骑');
+      jia.equips.weapon = null;
+      // 兵粮寸断：距离1候选 + 非♣判定跳摸牌
+      const bl14 = QYS.data.cards.find(c => c.id === 'bingliang');
+      const blInfo = QYS.rules.playInfo(g14, jia, { defId: 'bingliang', suit: '♠', number: 4 });
+      if (blInfo.targets.includes(bing) || !blInfo.targets.includes(yi)) throw new Error('兵粮寸断候选应为距离1以内角色');
+      yi.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
+      await bl14.onJudge(g14, yi, { suit: '♥', number: 5 });
+      if (!yi.turn.skipDraw) throw new Error('非♣判定应跳过摸牌阶段');
+      yi.turn.skipDraw = false;
+      await bl14.onJudge(g14, yi, { suit: '♣', number: 5 });
+      if (yi.turn.skipDraw) throw new Error('♣判定不应跳过摸牌阶段');
+      console.log('装备扩展检查 ✓（兵粮寸断/仁王盾/藤甲/白银狮子/护心镜/青釭剑/古锭刀/贯石斧/方天画戟/麒麟弓）');
     }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

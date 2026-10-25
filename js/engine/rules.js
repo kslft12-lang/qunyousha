@@ -17,8 +17,9 @@ QYS.rules = {};
     if (d.type === 'equip') return { ok: true, targets: [] };
     if (d.type === 'delayed') {
       if (d.id === 'shandian') return { ok: true, targets: [] };
-      // 隐身：不能被单体锦囊（乐不思蜀）选中为目标
-      const cands = game.othersAlive(p).filter(t => !game.hasSkill(t, 'sk_yinshen'));
+      // 乐不思蜀默认全场其他角色；兵粮寸断等自带候选（距离限制）
+      let cands = d.target?.candidates ? d.target.candidates(game, p) : game.othersAlive(p);
+      cands = cands.filter(t => !game.hasSkill(t, 'sk_yinshen'));
       return { ok: cands.length > 0, targets: cands };
     }
     if (d.canUse && !d.canUse(game, p)) return { ok: false, targets: [] };
@@ -65,7 +66,7 @@ QYS.rules = {};
 
     if (d.type === 'equip') {
       const old = user.equips[d.slot];
-      if (old) game.toDiscard(old, user, '被替换');
+      if (old) { game.toDiscard(old, user, '被替换'); game.loseEquip(user, old); }
       user.equips[d.slot] = card;
       game.log(`${user.name} 装备了【${d.name}】`, 'use');
       game.update();
@@ -109,9 +110,12 @@ QYS.rules = {};
       if (!info.ok) continue;
       let targets = [];
       if (info.targets.length) {
+        const d = def(card);
+        const cnt = d.target?.count ?? 1;
+        const maxT = d.target?.max ? d.target.max(game, p, card) : cnt; // 方天画戟：最后一张手牌的杀至多 3 目标
         const sel = await game.askTargets(p, {
-          candidates: info.targets, min: 1, max: 1,
-          hint: `请为【${def(card).name}】选择目标`,
+          candidates: info.targets, min: cnt, max: maxT,
+          hint: maxT > cnt ? `请为【${d.name}】选择目标（可至多 ${maxT} 名）` : `请为【${d.name}】选择目标`,
         });
         if (!sel || !sel.length) continue; // 取消则回到出牌
         targets = sel;
@@ -166,7 +170,7 @@ QYS.rules = {};
 
   async function turn(game, p) {
     game.turnCount++;
-    p.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+    p.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
     game.tickCurse(p); // 金针菇诅咒：持有者回合开始计数+1，满三个回合自动移出
     game.players.forEach(q => { q.ladderFail = false; }); // 梯子专家标记只在其发动者回合内有效（防发动者中途回合中断导致残留）
     if (game.warLock && game.warLock.a === p) game.warLock = null; // 下一次轮到自己，小学生战争结束（一起上厕所的解除在其技能钩子内）
@@ -181,7 +185,10 @@ QYS.rules = {};
       game.phase = ph;
       await game.emit('phaseStart', { player: p, phase: ph });
       if (ph === '判定') await judgePhase(game, p);
-      else if (ph === '摸牌') await game.drawCards(p, game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2);
+      else if (ph === '摸牌') {
+        if (p.turn.skipDraw) game.log(`${p.name} 跳过摸牌阶段（兵粮寸断）`, 'system');
+        else await game.drawCards(p, game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2);
+      }
       else if (ph === '出牌') {
         if (p.turn.skipPlay) game.log(`${p.name} 跳过出牌阶段`, 'system');
         else await playPhase(game, p);

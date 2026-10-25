@@ -26,6 +26,8 @@ QYS.data.cards = [
     desc: '出牌阶段，对你攻击范围内的一名其他角色使用。目标需打出【闪】，否则受到1点伤害。每回合限使用一次（【诸葛连弩】与【灌汤包】除外）。',
     target: {
       count: 1,
+      // 方天画戟：此【杀】为最后一张手牌时可指定至多 3 名目标
+      max: (g, u) => u.equips.weapon && QYS.def(u.equips.weapon).id === 'fangtian' && u.hand.length === 1 ? 3 : 1,
       candidates: (g, u) => {
         // 魅惑菇：被魅惑者（u.charmFrom 指向使用者）无法将其选为【杀】的目标
         const base = g.othersAlive(u).filter(t => g.inShaRange(u, t) && u.charmFrom !== t);
@@ -44,23 +46,29 @@ QYS.data.cards = [
       const limit = Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
       return u.turn.shaUsed < limit;
     },
-    async effect(g, { user, targets }) {
-      const tgt = targets[0];
-      // 太刀高手：每使用一次杀永久升级（无→白刃→黄刃→红刃，升级当次即生效）
+    async effect(g, { user, targets, card }) {
+      const ts = targets.filter(t => t.alive);
+      // 太刀高手：每使用一次杀永久升级（无→白刃→黄刃→红刃，升级当次即生效；多人目标也只升一次）
       if (g.hasSkill(user, 'sk_taidao') && user.blade < 3) {
         user.blade++;
         g.log(`【太刀高手】${user.name} 的太刀升至 ${['无', '白刃（攻击范围+1）', '黄刃（每回合两张杀）', '红刃（杀伤害+1）'][user.blade]}`, 'skill');
       }
-      // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸
-      const guantang = g.hasSkill(user, 'sk_guantangbao') && tgt.hp === 1;
       // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1
       const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
       const bladeDmg = g.hasSkill(user, 'sk_taidao') && user.blade >= 3 ? 1 : 0;
-      const bonus = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
+      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
+      // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸（多人目标命中任意一名即摸一张）
+      const guantang = g.hasSkill(user, 'sk_guantangbao') && ts.some(t => t.hp === 1);
       user.turn.wine = false;
       user.turn.shaUsed++;
-      const hit = await g.shaResolve(user, tgt, bonus);
-      if (guantang && hit) await g.drawCards(user, 1);
+      let anyHit = false;
+      for (const tgt of ts) {
+        if (g.over) break;
+        // 古锭刀：对已受伤角色的杀伤害+1
+        const guding = user.equips.weapon && QYS.def(user.equips.weapon).id === 'gudingdao' && tgt.hp < tgt.maxHp ? 1 : 0;
+        if (await g.shaResolve(user, tgt, base + guding, card)) anyHit = true;
+      }
+      if (guantang && anyHit) await g.drawCards(user, 1);
     },
   },
   {
@@ -146,6 +154,10 @@ QYS.data.cards = [
       for (const t of g.aoeOrder(user)) {
         if (g.over) return;
         if (!t.alive) continue; // 目标列表是结算前快照，中途阵亡者跳过，其余目标继续
+        if (t.equips.armor && QYS.def(t.equips.armor).id === 'tengjia') {
+          g.log(`${t.name} 的【藤甲】令【南蛮入侵】无效`, 'skill');
+          continue;
+        }
         if (await g.askWuxie({ user, card, target: t })) continue;
         const sha = await g.askResponse(t, '杀');
         if (sha) { g.discardFromHand(t, sha, '打出'); g.log(`${t.name} 打出了【杀】`, 'use'); }
@@ -160,8 +172,12 @@ QYS.data.cards = [
       for (const t of g.aoeOrder(user)) {
         if (g.over) return;
         if (!t.alive) continue; // 目标列表是结算前快照，中途阵亡者跳过，其余目标继续
+        if (t.equips.armor && QYS.def(t.equips.armor).id === 'tengjia') {
+          g.log(`${t.name} 的【藤甲】令【万箭齐发】无效`, 'skill');
+          continue;
+        }
         if (await g.askWuxie({ user, card, target: t })) continue;
-        if (!(await g.dodgeCheck(t, 'wanjian'))) await g.damage({ source: user, target: t, amount: 1, tag: '万箭齐发' });
+        if (!(await g.dodgeCheck(t, 'wanjian', user))) await g.damage({ source: user, target: t, amount: 1, tag: '万箭齐发' });
       }
     },
   },
@@ -210,6 +226,21 @@ QYS.data.cards = [
     },
   },
   {
+    id: 'bingliang', name: '兵粮寸断', type: 'delayed', deckCount: 3,
+    desc: '出牌阶段，对距离1以内的一名其他角色使用，置于其判定区：其判定阶段判定，若结果不为♣，其跳过摸牌阶段。',
+    target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.distance(u, t) <= 1) },
+    async effect(g, { targets, card }) {
+      targets[0].judges.push(card);
+      g.log(`${targets[0].name} 的判定区被放置了【兵粮寸断】`, 'use');
+    },
+    onJudge(g, p, j) {
+      if (j.suit !== '♣') {
+        g.log(`${p.name} 判定不为♣，将跳过摸牌阶段`, 'system');
+        p.turn.skipDraw = true;
+      }
+    },
+  },
+  {
     id: 'shandian', name: '闪电', type: 'delayed', deckCount: 2,
     desc: '置于你的判定区：判定阶段判定，若为黑桃2~9你受到3点雷电伤害；否则移至下家的判定区。',
     async effect(g, { user, card }) {
@@ -246,6 +277,42 @@ QYS.data.cards = [
   {
     id: 'ma_atk', name: '-1马', type: 'equip', slot: 'horseMinus', deckCount: 3,
     desc: '你计算与其他角色的距离-1。',
+  },
+  {
+    id: 'qinggangjian', name: '青釭剑', type: 'equip', slot: 'weapon', range: 2, deckCount: 1,
+    desc: '攻击范围2。锁定技，你使用【杀】无视目标角色的防具（八卦阵、仁王盾、藤甲、白银狮子、护心镜均失效）。',
+  },
+  {
+    id: 'gudingdao', name: '古锭刀', type: 'equip', slot: 'weapon', range: 2, deckCount: 1,
+    desc: '攻击范围2。锁定技，你使用【杀】指定已受伤的角色为目标后，此【杀】对其伤害+1。',
+  },
+  {
+    id: 'guanshifu', name: '贯石斧', type: 'equip', slot: 'weapon', range: 3, deckCount: 1,
+    desc: '攻击范围3。当你使用的【杀】被【闪】抵消后，你可以弃置两张手牌，令此【杀】依然生效。',
+  },
+  {
+    id: 'fangtian', name: '方天画戟', type: 'equip', slot: 'weapon', range: 4, deckCount: 1,
+    desc: '攻击范围4。当你使用的【杀】是你最后的手牌时，此【杀】可以指定至多三名目标。',
+  },
+  {
+    id: 'qilingong', name: '麒麟弓', type: 'equip', slot: 'weapon', range: 5, deckCount: 1,
+    desc: '攻击范围5。当你使用【杀】对目标角色造成伤害后，你可以弃置其装备区里的一张坐骑牌。',
+  },
+  {
+    id: 'renwang', name: '仁王盾', type: 'equip', slot: 'armor', deckCount: 1,
+    desc: '锁定技。黑色的【杀】对你无效。',
+  },
+  {
+    id: 'tengjia', name: '藤甲', type: 'equip', slot: 'armor', deckCount: 1,
+    desc: '锁定技。【杀】、【南蛮入侵】与【万箭齐发】对你无效。（本作无火系伤害，火焰伤害+1的效果从略）',
+  },
+  {
+    id: 'baiyinshizi', name: '白银狮子', type: 'equip', slot: 'armor', deckCount: 1,
+    desc: '锁定技。你每次受到的伤害最多 1 点；当你失去装备区里的【白银狮子】时，你回复 1 点体力。',
+  },
+  {
+    id: 'huxinjing', name: '护心镜', type: 'equip', slot: 'armor', deckCount: 1,
+    desc: '当你受到的伤害值不小于你的体力值时，你可以弃置装备区里的【护心镜】防止此伤害。',
   },
 
   // ---- 蘑菇牌（金针菇不进牌堆：只能由【金针菇】技能置入、移出不入弃牌堆；其余四张为普通牌堆牌，另可由【蘑菇生长】生成）----

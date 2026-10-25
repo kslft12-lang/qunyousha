@@ -238,6 +238,7 @@ QYS.data.skills = {
       if (game.hasSkill(p, 'sk_tuokuzi') && t.equips.armor) {
         const armor = t.equips.armor;
         t.equips.armor = null;
+        game.loseEquip(t, armor); // 白银狮子被夺走时目标回复1点体力
         p.hand.push(armor);
         game.log(`${t.name} 上厕所要脱裤子，【${QYS.def(armor).name}】被 ${p.name} 拿走了`, 'skill');
       }
