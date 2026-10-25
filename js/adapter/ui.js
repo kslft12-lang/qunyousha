@@ -144,12 +144,14 @@ QYS.ui.create = function (root) {
 
   // 统一的卡面渲染：data-defid/suit/num 供悬浮详情，attrs 附加 data-card-idx / data-by 等
   // 贴图类：cards 数据里 art 字段（curse 诅咒牌黑紫渐变边框 / shroom 蘑菇牌环绕特效边框）
+  // img 字段：assets/cards/<id>.png 作为卡面底图（牌名/花色叠加其上）
   function faceHtml(card, attrs = '', extra = '') {
     const d = QYS.def(card);
     const red = colorOf(card.suit) === 'red';
     const artCls = d.art ? ` art${d.art}` : '';
+    const face = d.img ? `<img class="face" src="assets/cards/${d.id}.png" alt="">` : '';
     return `<div class="card mini${artCls} ${red ? 'redSuit' : 'blackSuit'} ${extra}" data-defid="${card.defId}" data-suit="${card.suit}" data-num="${card.number}" ${attrs}>
-      <div class="corner">${numStr(card.number)}<br>${card.suit}</div>
+      ${face}<div class="corner">${numStr(card.number)}<br>${card.suit}</div>
       <div class="cname">${d.name}</div>
     </div>`;
   }
@@ -412,7 +414,7 @@ QYS.ui.create = function (root) {
     const suit = el.dataset.suit || '';
     const red = suit && colorOf(suit) === 'red';
     const by = el.dataset.by ? `<div class="dBy">${el.dataset.by}${el.dataset.via ? ' · ' + el.dataset.via : ''}</div>` : '';
-    return `<img src="assets/cards/${d.id}.png" alt="" onerror="this.remove()">
+    return `${d.img ? `<img src="assets/cards/${d.id}.png" alt="">` : ''}
       <div class="dTitle ${red ? 'redSuit' : 'blackSuit'}">${d.name} ${suit ? `<small>${numStr(+el.dataset.num)}${suit}</small>` : ''}</div>
       <div class="dType">${TYPE_NAME[d.type]}${d.slot ? ' · ' + SLOT_NAME[d.slot] : ''}</div>
       ${by}

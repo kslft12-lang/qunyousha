@@ -58,7 +58,7 @@ QYS.codex = {};
         if (t === 'equip' && d.slot) meta.push(SLOT_NAME[d.slot]);
         if (d.range) meta.push(`射程${d.range}`);
         return `<div class="codexEntry codexCardEntry">
-          <div class="card codexFace${d.art ? ' art' + d.art : ''}" data-type="${t}" style="font-size:${d.name.length <= 2 ? 19 : d.name.length <= 4 ? 15 : 12}px; letter-spacing:${d.name.length <= 2 ? 4 : d.name.length <= 4 ? 2 : 1}px;">${d.name}<img src="assets/cards/${d.id}.png" alt="" onerror="this.remove()"></div>
+          <div class="card codexFace${d.art ? ' art' + d.art : ''}" data-type="${t}" style="font-size:${d.name.length <= 2 ? 19 : d.name.length <= 4 ? 15 : 12}px; letter-spacing:${d.name.length <= 2 ? 4 : d.name.length <= 4 ? 2 : 1}px;">${d.name}${d.img ? `<img src="assets/cards/${d.id}.png" alt="">` : ''}</div>
           <div class="codexEntryBody">
             <div class="codexName">${d.name}${meta.map(m => `<span class="chip">${m}</span>`).join('')}</div>
             <div class="dDesc">${d.desc || ''}</div>

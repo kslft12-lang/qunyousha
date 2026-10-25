@@ -277,6 +277,10 @@ button { font-family: inherit; cursor: pointer; }
 .card.mini { width: 64px; height: 90px; cursor: pointer; transition: transform .15s, box-shadow .15s; }
 .card.mini:hover { transform: translateY(-8px); box-shadow: 0 6px 14px #00000066; }
 .card.mini.playable { box-shadow: 0 0 0 2px var(--gold), 0 0 10px #c9a22777; }
+/* 卡面底图（cards 数据 img: true）：铺满卡面，牌名/花色叠加其上 */
+.card .face { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 6px; object-fit: cover; }
+.card .face ~ .corner { text-shadow: 0 0 3px #fff, 0 0 2px #fff, 0 1px 2px #00000055; }
+.card:has(.face) .cname { text-shadow: 0 0 4px #ffffffd0, 0 1px 3px #000000aa; }
 .card .corner { position: absolute; top: 4px; left: 6px; font-size: 12px; line-height: 1.1; font-weight: bold; }
 .card .cname {
   position: absolute; inset: 0;

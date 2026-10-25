@@ -22,7 +22,7 @@ QYS.data = QYS.data || {};
 QYS.data.cards = [
   // ---- 基本牌 ----
   {
-    id: 'sha', name: '杀', type: 'basic', deckCount: 30,
+    id: 'sha', name: '杀', type: 'basic', deckCount: 30, img: true,
     desc: '出牌阶段，对你攻击范围内的一名其他角色使用。目标需打出【闪】，否则受到1点伤害。每回合限使用一次（【诸葛连弩】与【灌汤包】除外）。',
     target: {
       count: 1,
@@ -72,7 +72,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'shan', name: '闪', type: 'basic', deckCount: 22, noPlay: true,
+    id: 'shan', name: '闪', type: 'basic', deckCount: 22, noPlay: true, img: true,
     desc: '当你成为【杀】或【万箭齐发】的目标时打出，令该牌对你无效。',
   },
   {
@@ -114,7 +114,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'shunshou', name: '顺手牵羊', type: 'trick', deckCount: 5,
+    id: 'shunshou', name: '顺手牵羊', type: 'trick', deckCount: 5, img: true,
     desc: '获得距离1以内的一名其他角色区域里的一张牌。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.anyCards(t) && g.distance(u, t) <= 1) },
     async effect(g, { user, targets, card }) {
@@ -211,7 +211,7 @@ QYS.data.cards = [
 
   // ---- 延迟锦囊 ----
   {
-    id: 'lebu', name: '乐不思蜀', type: 'delayed', deckCount: 3,
+    id: 'lebu', name: '乐不思蜀', type: 'delayed', deckCount: 3, img: true,
     desc: '出牌阶段置于一名其他角色的判定区：其判定阶段判定，若结果为黑桃，跳过其出牌阶段。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u) },
     async effect(g, { targets, card }) {
@@ -226,7 +226,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'bingliang', name: '兵粮寸断', type: 'delayed', deckCount: 3,
+    id: 'bingliang', name: '兵粮寸断', type: 'delayed', deckCount: 3, img: true,
     desc: '出牌阶段，对距离1以内的一名其他角色使用，置于其判定区：其判定阶段判定，若结果不为♣，其跳过摸牌阶段。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.distance(u, t) <= 1) },
     async effect(g, { targets, card }) {
