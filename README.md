@@ -10,28 +10,30 @@
 
 ## 部署
 
-**GitHub Pages（静态托管，本仓库直接可用）**
+**联机（主方案）：本机 + 内网穿透，零注册零花费**
+
+1. 下载 [cloudflared Windows 版](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe) 放到 `tools/cloudflared.exe`（`tools/` 不入库；换电脑时重新下载）
+2. 双击 **`start-online.bat`**：同时启动游戏服务器（`node server.js 8123`）和公网隧道
+3. 隧道窗口出现 `https://xxxx-xxxx.trycloudflare.com`，发到群里——群友打开点「联机」进大厅，房主（先加入者）开局，空座位机器人代打
+
+注意：快速隧道**每次重启网址都会变**，你电脑关机就进不去；要固定网址可换花生壳/cpolar（实名、不要卡）或升级 Cloudflare 命名隧道。想 7×24 不依赖自己开机，用下面的云托管。
+
+**GitHub Pages（静态托管，单机/图鉴在线玩）**
 
 1. 打开 https://github.com/kslft12-lang/qunyousha → `Settings` → 左侧 `Pages`
 2. `Build and deployment` → Source 选 `Deploy from a branch` → Branch 选 `main`、目录 `/ (root)` → `Save`
 3. 等一两分钟，访问 https://kslft12-lang.github.io/qunyousha/ 即可
 
-能力边界：GitHub Pages 只能托管静态页面，**单机 / 全机器人演示 / 图鉴可用；「联机」不可用**（页面上点联机会有明确提示）——因为联机需要一个常驻的 WebSocket 服务器，GitHub 不提供后端运行环境。
+能力边界：GitHub Pages 只能托管静态页面，**单机 / 全机器人演示 / 图鉴可用；「联机」不可用**（页面上点联机会有明确提示）——联机需要一个常驻的 WebSocket 服务器，GitHub 不提供后端运行环境。
 
-**云托管联机（Render，免费档即可）**
+**云托管联机（Render 等，备选）**
 
 1. 打开 https://render.com → `Sign in with GitHub`（授权访问 qunyousha 仓库）
 2. 控制台 `New +` → `Web Service` → 选中本仓库
 3. 配置页：Region 随意，Instance Type 选 `Free`，Start Command 留空（自动用 package.json 的 `npm start`）→ `Create Web Service`
-4. 构建日志跑完后，页面顶部会给固定公网网址（形如 `https://qunyousha-xxxx.onrender.com`），发到群里即可联机
+4. 构建完成后得到固定公网网址（`https://qunyousha-xxxx.onrender.com`）。免费档 15 分钟无人访问会休眠，唤醒等 30~60 秒；部分新账号要求验证卡片，遇到就换 Zeabur/Back4App 试或退回主方案
 
-免费档注意：15 分钟无人访问会休眠，下次打开要等 30~60 秒唤醒；想保持常驻可用 cron-job.org 之类每 10 分钟 ping 一次首页。国内直连 onrender.com 的速度因地区而异，若群友访问慢，可套自定义域名或退回隧道方案。
-
-**局域网 / 隧道（备选）**
-
-- 局域网：任选一台电脑 `node server.js 8123`，群友访问 `http://<该机IP>:8123`
-- 公网内网穿透：cloudflared 快速隧道（无需账号；历史提交 `2bf9911` 里有一键脚本，可用 `git show 2bf9911:start-online.bat` 找回）
-- 注意：服务器是"单房间、无鉴权"的框架实现，知道地址即可进入（对局开始后加入为观战）
+通用注意：服务器是"单房间、无鉴权"的框架实现，知道地址即可进入（对局开始后加入为观战）。
 
 ## 玩法
 
