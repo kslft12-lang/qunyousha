@@ -29,6 +29,14 @@
   </div>
   <div id="lobby" hidden>
     <h2>联机大厅</h2>
+    <div id="lobbyCodeRow" hidden>房间码 <b id="lobbyCodeText"></b><span class="tip">发给朋友，输入此码加入</span></div>
+    <div id="lobbyJoinRow">
+      <label class="field">房间码 <input id="roomCode" maxlength="4" placeholder="加入必填，创建可不填"></label>
+      <div class="btns">
+        <button id="btnRoomCreate" class="btn primary">创建新房间</button>
+        <button id="btnRoomJoin" class="btn">加入房间</button>
+      </div>
+    </div>
     <div id="lobbySeats"></div>
     <div id="lobbyOpts" hidden>
       <label class="field">玩家数量
@@ -40,7 +48,7 @@
       </label>
       <button id="btnOnlineStart" class="btn primary">开始联机对局</button>
     </div>
-    <p id="lobbyMsg" class="tip">未坐满的座位由机器人代打</p>
+    <p id="lobbyMsg" class="tip">创建房间，或用房主给的 4 位房间码加入；同一房间昵称不能重复</p>
     <button id="btnLobbyBack" class="btn">返回</button>
   </div>
   <div id="gameRoot"></div>

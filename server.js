@@ -1,6 +1,7 @@
 // 群友杀 - 联机服务器：静态文件 + WebSocket 房间 + 权威引擎
 // 用法：node server.js [端口]   默认 8123
-// 浏览器打开 http://localhost:8123 ，点「联机」加入；0 号位（房主）点开局，空座位由机器人代打。
+// 房间模型：房主「创建新房间」得 4 位房间码，其他人凭码加入；同一房间昵称唯一。
+// 房主离开时房主身份自动转移给剩余座位号最小的玩家；房间空了即解散。
 // TODO(联机): WebSocket 为极简实现（未处理分片帧与压缩扩展），牌局消息都很小，够用
 'use strict';
 const http = require('http');
@@ -53,34 +54,61 @@ function parseFrames(conn, onText) {
 }
 
 // ---- 房间 ----
-const room = {
-  conns: new Map(),        // conn -> seat（加入顺序即座位号）
-  game: null,
-  started: false,
-  disconnected: new Set(), // 掉线座位，后续提问直接按机器人默认作答
-  playerCount: 5,
-  nextSeat: 0,
-  askSeq: 0,
-};
+const rooms = new Map(); // code -> room
+const CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // 去掉易混淆字符
 
-function broadcastLobby() {
-  const n = Math.max(room.conns.size, room.playerCount, room.nextSeat);
-  const seats = [];
+const cleanName = s => String(s || '').replace(/[<>&"']/g, '').trim().slice(0, 8);
+const cleanCode = s => String(s || '').toUpperCase().replace(/[^2-9A-HJKMNP-Z]/g, '').slice(0, 4);
+
+function genCode() {
+  let code;
+  do {
+    code = Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join('');
+  } while (rooms.has(code));
+  return code;
+}
+
+function newRoom() {
+  return {
+    code: genCode(),
+    conns: new Map(),        // conn -> seat
+    nextSeat: 0,             // 仅递增；对局中后加入者座位号 >= playerCount，为观战
+    hostSeat: 0,
+    playerCount: 5,
+    started: false,
+    disconnected: new Set(), // 掉线座位，其提问按机器人默认作答
+    game: null,
+    askSeq: 0,
+  };
+}
+
+const roomOf = conn => (conn.room ? rooms.get(conn.room) || null : null);
+
+function seatNames(room) {
+  const n = Math.max(room.conns.size, room.started ? room.playerCount : 0, room.hostSeat + 1);
+  const names = [];
   for (let i = 0; i < n; i++) {
     let name = null;
     for (const [conn, seat] of room.conns) if (seat === i) { name = conn.name; break; }
-    seats.push(name);
+    names.push(name);
   }
+  return names;
+}
+
+function broadcastLobby(room) {
   for (const conn of room.conns.keys())
-    conn.send({ t: 'lobby', seats, started: !!(room.game && !room.game.over) });
+    conn.send({
+      t: 'lobby', code: room.code, seats: seatNames(room), hostSeat: room.hostSeat,
+      started: !!(room.game && !room.game.over),
+    });
 }
 
 function sendState(conn) {
-  if (!room.game) return;
-  const seat = room.started ? room.conns.get(conn) : null;
-  conn.send({ t: 'state', snap: QYS.core.snapshot(room.game, seat) });
+  const room = roomOf(conn);
+  if (!room || !room.game) return;
+  conn.send({ t: 'state', snap: QYS.core.snapshot(room.game, room.started ? room.conns.get(conn) : null) });
 }
-function broadcastStates() { for (const conn of room.conns.keys()) sendState(conn); }
+function broadcastStates(room) { for (const conn of room.conns.keys()) sendState(conn); }
 
 function mapCard(p, v) {
   if (!v || !v.defId) return null;
@@ -89,14 +117,14 @@ function mapCard(p, v) {
 }
 
 // 远端玩家的问答适配器：把引擎提问转发给浏览器，等待点击回答
-function netIoFor(conn, seat) {
+function netIoFor(room, conn, seat) {
   const ask = (method, args) => new Promise(resolve => {
     if (room.disconnected.has(seat)) return resolve(null);
     const id = 'a' + (++room.askSeq);
     const timer = setTimeout(() => {
       if (conn.pending[id]) {
         delete conn.pending[id];
-        console.log(`座位 ${seat + 1} 应答超时，按默认处理`);
+        console.log(`[${room.code}] 座位 ${seat + 1} 应答超时，按默认处理`);
         resolve(defaultAnswer(method, args));
       }
     }, 90000);
@@ -137,7 +165,7 @@ function defaultAnswer(method, args) {
   return null; // chooseCard→放弃 / bool→否 / askPlay→结束
 }
 
-function startGame(playerCount) {
+function startGame(room, playerCount) {
   room.started = true;
   room.playerCount = playerCount;
   room.disconnected.clear();
@@ -147,33 +175,57 @@ function startGame(playerCount) {
   room.game = QYS.core.createGame({
     playerCount,
     humanSeat: null,
-    ioFor: p => (seatConn[p.seat] && !room.disconnected.has(p.seat)) ? netIoFor(seatConn[p.seat], p.seat) : QYS.bot.io(),
+    ioFor: p => (seatConn[p.seat] && !room.disconnected.has(p.seat)) ? netIoFor(room, seatConn[p.seat], p.seat) : QYS.bot.io(),
   });
-  room.game.view = { render: broadcastStates };
-  broadcastStates();
-  console.log(`对局开始：${playerCount} 人（人类 ${humans}，机器人 ${playerCount - humans}）`);
+  room.game.view = { render: () => broadcastStates(room) };
+  broadcastStates(room);
+  console.log(`[${room.code}] 对局开始：${playerCount} 人（人类 ${humans}，机器人 ${playerCount - humans}）`);
   QYS.rules.run(room.game)
-    .then(() => { console.log('对局结束：', room.game.winner); broadcastStates(); broadcastLobby(); })
-    .catch(e => { console.error('对局异常：', e); broadcastStates(); });
+    .then(() => { console.log(`[${room.code}] 对局结束：`, room.game.winner); broadcastStates(room); broadcastLobby(room); })
+    .catch(e => { console.error(`[${room.code}] 对局异常：`, e); broadcastStates(room); });
+}
+
+// 加入房间：对局中后加入为观战（座位号 >= playerCount）
+function joinRoom(conn, room, name) {
+  const seat = room.nextSeat++;
+  conn.room = room.code;
+  conn.name = name;
+  conn.pending = {};
+  room.conns.set(conn, seat);
+  conn.send({ t: 'hello', seat, code: room.code });
+  broadcastLobby(room);
+  if (room.game) sendState(conn);
+  console.log(`[${room.code}] ${name} 加入，座位 ${seat + 1}${room.game && !room.game.over ? '（观战）' : ''}`);
 }
 
 function onMessage(conn, str) {
   let msg;
   try { msg = JSON.parse(str); } catch { return; }
-  if (msg.t === 'join') {
-    if (room.conns.has(conn)) return;
-    const seat = room.nextSeat++;
-    conn.name = String(msg.name || '').replace(/[<>&"']/g, '').slice(0, 8) || `玩家${seat + 1}`;
-    conn.pending = {};
-    room.conns.set(conn, seat);
-    conn.send({ t: 'hello', seat });
-    broadcastLobby();
-    if (room.game) sendState(conn); // 中途加入 = 观战
-    console.log(`${conn.name} 加入，座位 ${seat + 1}`);
+
+  if (msg.t === 'create') {
+    if (roomOf(conn)) return;
+    const name = cleanName(msg.name) || '玩家';
+    const room = newRoom();
+    rooms.set(room.code, room);
+    joinRoom(conn, room, name);
+    console.log(`[${room.code}] 房间创建，房主 ${name}`);
+  } else if (msg.t === 'join') {
+    if (roomOf(conn)) return;
+    const name = cleanName(msg.name) || '玩家';
+    const code = cleanCode(msg.code);
+    const room = rooms.get(code);
+    if (!room) return conn.send({ t: 'error', msg: '房间不存在或已解散，请核对房间码' });
+    // 同一房间内昵称唯一（不区分大小写）
+    for (const [c] of room.conns)
+      if (c.name.toLowerCase() === name.toLowerCase())
+        return conn.send({ t: 'error', msg: `房间内已有「${c.name}」，请换一个昵称` });
+    joinRoom(conn, room, name);
   } else if (msg.t === 'start') {
-    if (room.conns.get(conn) !== 0) return;
+    const room = roomOf(conn);
+    if (!room) return;
+    if (room.conns.get(conn) !== room.hostSeat) return;
     if (room.game && !room.game.over) return;
-    startGame(Math.max(2, Math.min(8, Number(msg.playerCount) || 5)));
+    startGame(room, Math.max(2, Math.min(8, Number(msg.playerCount) || 5)));
   } else if (msg.t === 'answer') {
     const pend = conn.pending && conn.pending[msg.id];
     if (pend) { delete conn.pending[msg.id]; pend(msg.value === undefined ? null : msg.value); }
@@ -183,18 +235,31 @@ function onMessage(conn, str) {
 function onConnection(conn) {
   conn.pending = {};
   conn.buf = Buffer.alloc(0);
+  conn.alive = true;
   conn.send = obj => { if (conn.alive) wsSend(conn.socket, JSON.stringify(obj)); };
   conn.socket.on('data', d => { conn.buf = Buffer.concat([conn.buf, d]); parseFrames(conn, onMessage); });
   const cleanup = () => {
-    if (conn.alive === false) return;
+    if (conn.alive === false && conn.socket.destroyed) return;
     conn.alive = false;
+    const room = roomOf(conn);
+    if (!room) return;
     const seat = room.conns.get(conn);
     room.conns.delete(conn);
-    if (seat != null && room.game && !room.game.over && seat < room.playerCount) {
+    if (seat == null) return;
+    if (room.game && !room.game.over && seat < room.playerCount) {
       room.disconnected.add(seat);
-      console.log(`座位 ${seat + 1} 掉线，由机器人代打`);
+      console.log(`[${room.code}] 座位 ${seat + 1} 掉线，由机器人代打`);
     }
-    broadcastLobby();
+    if (room.conns.size === 0) {
+      rooms.delete(room.code);
+      console.log(`[${room.code}] 房间已空，解散`);
+    } else {
+      if (seat === room.hostSeat) {
+        room.hostSeat = Math.min(...room.conns.values());
+        console.log(`[${room.code}] 房主离开，房主转移给座位 ${room.hostSeat + 1}`);
+      }
+      broadcastLobby(room);
+    }
   };
   conn.socket.on('close', cleanup);
   conn.socket.on('error', cleanup);

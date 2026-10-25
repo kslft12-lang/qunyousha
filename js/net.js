@@ -1,12 +1,12 @@
 // 群友杀 - 联机客户端：连接 server.js，用状态快照渲染，把人类决策转发给服务器
 // 协议（JSON 文本帧）：
-//   客户端→服务器: {t:'join',name} {t:'start',playerCount} {t:'answer',id,value}
-//   服务器→客户端: {t:'hello',seat} {t:'lobby',seats,started} {t:'state',snap} {t:'ask',id,method,args}
+//   客户端→服务器: {t:'create',name} {t:'join',name,code} {t:'start',playerCount} {t:'answer',id,value}
+//   服务器→客户端: {t:'hello',seat,code} {t:'error',msg} {t:'lobby',code,seats,hostSeat,started} {t:'state',snap} {t:'ask',id,method,args}
 globalThis.QYS = globalThis.QYS || {};
 QYS.net = {};
 
 (function () {
-  let ws = null, mySeat = null, splashDone = false, overShown = false, view = null;
+  let ws = null, mySeat = null, roomCode = null, splashDone = false, overShown = false, view = null;
   const askQueue = [];
   let busy = false;
 
@@ -14,39 +14,65 @@ QYS.net = {};
   const hide = id => { document.getElementById(id).hidden = true; };
   const lobbyMsg = text => { const el = document.getElementById('lobbyMsg'); if (el) el.textContent = text; };
 
-  function connect(nick, v) {
+  // 点「联机」：只打开大厅，等用户创建或加入
+  QYS.net.openLobby = function (v) {
     view = v;
     show('lobby');
     hide('startScreen');
-    // GitHub Pages 只能托管静态页面，联机需要 WebSocket 服务器
+    show('lobbyJoinRow');
+    hide('lobbyCodeRow');
+    hide('lobbyOpts');
+    document.getElementById('lobbySeats').innerHTML = '';
+    document.getElementById('roomCode').value = '';
+    lobbyMsg('创建新房间，或用房主给的 4 位房间码加入（同一房间昵称不能重复）');
+  };
+
+  function ensureWs(action) {
     if (location.hostname.endsWith('.github.io')) {
-      lobbyMsg('GitHub Pages 版仅支持单机/演示/图鉴。联机请在本地运行 node server.js（见 README「公网联机部署」），或部署到 Node 托管平台。');
-      return;
+      return lobbyMsg('GitHub Pages 版仅支持单机/演示/图鉴。联机请在本地运行 node server.js（见 README「部署」），或部署到 Node 托管平台。');
     }
+    const send = () => ws.send(JSON.stringify(action));
+    if (ws && ws.readyState === 1) return send();
     lobbyMsg('连接中…（需要用 node server.js 启动才能联机）');
-    // https 页面必须用 wss，http（本地）用 ws
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     try { ws = new WebSocket(`${wsProto}//${location.host}`); } catch { return lobbyMsg('无法建立连接'); }
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: String(nick || '') }));
+    ws.onopen = send;
     ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch (err) { console.error(err); } };
     ws.onclose = () => lobbyMsg('连接已断开。请确认 node server.js 在运行，刷新页面重试。');
     ws.onerror = () => {};
   }
 
   function handle(msg) {
-    if (msg.t === 'hello') { mySeat = msg.seat; }
-    else if (msg.t === 'lobby') renderLobby(msg);
-    else if (msg.t === 'state') onState(msg.snap);
-    else if (msg.t === 'ask') { askQueue.push(msg); drain(); }
+    if (msg.t === 'hello') {
+      mySeat = msg.seat;
+      roomCode = msg.code;
+      hide('lobbyJoinRow');
+      show('lobbyCodeRow');
+      document.getElementById('lobbyCodeText').textContent = roomCode;
+    } else if (msg.t === 'error') {
+      lobbyMsg(msg.msg || '加入失败');
+    } else if (msg.t === 'lobby') {
+      renderLobby(msg);
+    } else if (msg.t === 'state') {
+      onState(msg.snap);
+    } else if (msg.t === 'ask') {
+      askQueue.push(msg);
+      drain();
+    }
   }
 
   function renderLobby(msg) {
-    if (msg.started) { hide('lobby'); return; }
-    show('lobby');
-    document.getElementById('lobbySeats').innerHTML = msg.seats.map((n, i) =>
-      `<div class="lobbySeat${i === mySeat ? ' me' : ''}"><span class="avatar lobbyAv" data-initial="${(n || '机')[0]}"></span>座位 ${i + 1} · ${n || '机器人'}</div>`).join('');
-    document.getElementById('lobbyOpts').hidden = mySeat !== 0;
-    lobbyMsg(mySeat === 0 ? '你是房主，坐满后即可开局' : '等待房主开局…');
+    if (msg.started && !view.game) { hide('lobby'); return; } // 对局进行中才加入的观战者，直接看牌局
+    document.getElementById('lobbyCodeText').textContent = msg.code;
+    const seats = document.getElementById('lobbySeats');
+    seats.innerHTML = msg.seats.map((n, i) => {
+      const tag = i === msg.hostSeat ? '（房主）' : '';
+      return `<div class="lobbySeat${i === mySeat ? ' me' : ''}"><span class="avatar lobbyAv" data-initial="${(n || '机')[0]}"></span>座位 ${i + 1} · ${n || '机器人'}${tag}</div>`;
+    }).join('');
+    document.getElementById('lobbyOpts').hidden = !(mySeat === msg.hostSeat && !msg.started);
+    lobbyMsg(mySeat === msg.hostSeat && !msg.started
+      ? '你是房主：人齐后点「开始联机对局」，把房间码发给朋友'
+      : '等待房主开局…');
   }
 
   function onState(snap) {
@@ -60,11 +86,11 @@ QYS.net = {};
       return;
     }
     if (first) {
-      if (snap.humanSeat != null) {
+      if (snap.humanSeat != null && snap.humanSeat < snap.players.length) {
         splashDone = false;
         view.showSplash(snap).then(() => { splashDone = true; drain(); });
       } else {
-        splashDone = true;
+        splashDone = true; // 观战
       }
     }
   }
@@ -109,17 +135,29 @@ QYS.net = {};
     return c => { try { return QYS.def(c).name === tag; } catch { return false; } };
   }
 
+  function leaveRoom() {
+    if (ws) { ws.close(); ws = null; }
+    mySeat = null; roomCode = null; splashDone = false; overShown = false;
+    askQueue.length = 0; busy = false;
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btnRoomCreate')?.addEventListener('click', () =>
+      ensureWs({ t: 'create', name: document.getElementById('nickName').value }));
+    document.getElementById('btnRoomJoin')?.addEventListener('click', () => {
+      const code = document.getElementById('roomCode').value.trim();
+      if (code.length !== 4) return lobbyMsg('请输入 4 位房间码');
+      ensureWs({ t: 'join', name: document.getElementById('nickName').value, code });
+    });
     document.getElementById('btnOnlineStart')?.addEventListener('click', () => {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'start', playerCount: +document.getElementById('onlineCount').value }));
     });
     document.getElementById('btnLobbyBack')?.addEventListener('click', () => {
-      if (ws) ws.close();
+      leaveRoom();
       hide('lobby');
       show('startScreen');
     });
   });
 
-  QYS.net.connect = connect;
-  QYS.net.debug = () => ({ queued: askQueue.length, splashDone, busy, hasWs: !!ws, wsState: ws && ws.readyState, mySeat });
+  QYS.net.debug = () => ({ queued: askQueue.length, splashDone, busy, hasWs: !!ws, wsState: ws && ws.readyState, mySeat, roomCode });
 })();
