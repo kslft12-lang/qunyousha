@@ -175,6 +175,7 @@ async function play(n) {
       const g8 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['噜', '甲', '乙', '丙', '丁'], ioFor: () => io8({ card: () => false }) });
       const [lulu, jia, yi] = g8.players;
       lulu.skillIds = ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'];
+      jia.skillIds = []; yi.skillIds = []; // 钉死对手技能，排除随机角色的蟑螂/呜呜呜袜等干扰
       if (!g8.inShaRange(lulu, yi)) throw new Error('狼牙棒主公攻击范围应+1覆盖距离2');
       lulu.identity = '反';
       if (g8.inShaRange(lulu, yi)) throw new Error('非主公狼牙棒不应生效');
@@ -227,6 +228,7 @@ async function play(n) {
       const g9 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['花', '甲', '乙', '丙', '丁'], ioFor: io9 });
       const hua = g9.players[0], far = g9.players[2];
       hua.skillIds = ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'];
+      far.skillIds = []; // 钉死靶子技能，排除蟑螂回魂/新疆网络等随机干扰
       // 无膝盖：坐骑不可装备，武器/防具正常
       if (QYS.rules.playInfo(g9, hua, { defId: 'ma_atk', suit: '♣', number: 9 }).ok) throw new Error('-1马应不可装备');
       if (!QYS.rules.playInfo(g9, hua, { defId: 'liannu', suit: '♦', number: 1 }).ok) throw new Error('武器应可装备');
@@ -272,6 +274,7 @@ async function play(n) {
       const g10 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 1, names: ['魔', '甲', '乙', '丙', '丁'], ioFor: () => io10({}) });
       const [mo, jia, yi] = g10.players;
       mo.skillIds = ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'];
+      yi.skillIds = []; jia.skillIds = []; // 钉死他人技能，避免随机出的第二隐身/干扰技能
       // 呜呜呜袜：来源有手牌且同意 → 交牌、伤害照常
       jia.hand.length = 0; jia.hand.push({ defId: 'sha', suit: '♠', number: 5 });
       const moHandB = mo.hand.length, moHpB = mo.hp;
