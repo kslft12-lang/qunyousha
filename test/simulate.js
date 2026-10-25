@@ -40,4 +40,29 @@ async function play(n) {
   if (!Array.isArray(snap.players[0].hand) || !snap.players[0].hand.length) throw new Error('快照缺少座位0手牌');
   if (!Array.isArray(snap.discardEntries)) throw new Error('快照缺少弃牌记录');
   console.log('快照检查 ✓（座位0可见自己手牌，座位1手牌/身份不可见）');
+
+  // 装备机制检查：武器射程/连弩/八卦阵属性在卡牌定义上（QYS.def），马为存在性判定
+  {
+    const io = () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets() { return null; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
+    const g = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
+    const me = g.players[0], far = g.players[2]; // 环距 2
+    if (g.distance(me, far) !== 2) throw new Error('环距离计算错误');
+    if (g.inShaRange(me, far)) throw new Error('无武器距离2应在范围外');
+    me.equips.weapon = { defId: 'qinglong', suit: '♠', number: 5 };
+    if (!g.inShaRange(me, far)) throw new Error('青龙偃月刀射程3应覆盖距离2');
+    me.equips.weapon = null;
+    me.equips.horseMinus = { defId: 'ma_atk', suit: '♣', number: 9 };
+    if (!g.inShaRange(me, far)) throw new Error('-1马应使距离2变为1');
+    me.equips.horseMinus = null;
+    far.equips.horsePlus = { defId: 'ma_def', suit: '♥', number: 3 };
+    if (g.distance(me, far) !== 3) throw new Error('+1马应使他人到其距离+1');
+    far.equips.horsePlus = null;
+    me.equips.weapon = { defId: 'liannu', suit: '♦', number: 1 };
+    me.turn = { shaUsed: 1, wine: false, skipPlay: false, skillUsed: false };
+    const shaDef = QYS.data.cards.find(c => c.id === 'sha');
+    if (!shaDef.canUse(g, me)) throw new Error('诸葛连弩应允许出第二张杀');
+    me.equips.weapon = { defId: 'qinglong', suit: '♠', number: 5 };
+    if (shaDef.canUse(g, me)) throw new Error('非连弩武器每回合限一杀');
+    console.log('装备机制检查 ✓（射程/连弩/±1马）');
+  }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

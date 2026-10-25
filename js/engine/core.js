@@ -166,7 +166,11 @@ QYS.core = QYS.core || {};
       if (a.equips.horseMinus) d -= 1;
       return Math.max(1, d);
     };
-    game.inShaRange = (a, b) => game.distance(a, b) <= (a.equips.weapon?.range ?? 1);
+    game.inShaRange = (a, b) => {
+      // 武器射程在卡牌定义上（QYS.def），实例只有 defId/suit/number
+      const w = a.equips.weapon ? QYS.def(a.equips.weapon) : null;
+      return game.distance(a, b) <= (w?.range ?? 1);
+    };
 
     // ---- 问答（引擎与决策者之间的唯一通道，人类/机器人同一接口）----
     game.askCard = async (p, opts) => {
@@ -221,7 +225,8 @@ QYS.core = QYS.core || {};
     // 闪避判定：八卦阵 → 【闪】 → 被动技能（一几一几仅被杀指定、万人迷任意场合）。被【杀】与【万箭齐发】共用。
     // cause: 'sha' 被杀指定为目标 | 'wanjian' 万箭齐发
     game.dodgeCheck = async (target, cause = 'sha') => {
-      if (target.equips.armor?.id === 'bagua' && await game.askBool(target, '是否发动【八卦阵】？', { tag: '八卦' })) {
+      const armorDef = target.equips.armor ? QYS.def(target.equips.armor) : null;
+      if (armorDef?.id === 'bagua' && await game.askBool(target, '是否发动【八卦阵】？', { tag: '八卦' })) {
         const j = game.judge(target, '八卦阵');
         if (j.color === 'red') { game.log(`八卦阵判定为红色，视为打出【闪】`, 'use'); game.update(); return true; }
       }

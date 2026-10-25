@@ -25,7 +25,10 @@ QYS.data.cards = [
     id: 'sha', name: '杀', type: 'basic', deckCount: 30,
     desc: '出牌阶段，对你攻击范围内的一名其他角色使用。目标需打出【闪】，否则受到1点伤害。每回合限使用一次（【诸葛连弩】除外）。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.inShaRange(u, t)) },
-    canUse: (g, u) => u.turn.shaUsed === 0 || !!(u.equips.weapon && u.equips.weapon.unlimitedSha),
+    canUse: (g, u) => {
+      const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
+      return u.turn.shaUsed === 0 || !!(w && w.unlimitedSha);
+    },
     async effect(g, { user, targets }) {
       const bonus = user.turn.wine ? 1 : 0;
       user.turn.wine = false;
