@@ -36,6 +36,7 @@ QYS.ui.create = function (root) {
     <div id="gameScreen" hidden>
       <div id="tableArea">
         <div id="idStats"></div>
+        <div id="fallenRow"></div>
         <div id="seal"></div>
         <div id="ring"></div>
         <div id="centerBar"><div id="turnInfo"></div><div id="prompt"></div></div>
@@ -51,7 +52,7 @@ QYS.ui.create = function (root) {
   const $ = s => root.querySelector(s);
   const gameScreen = $('#gameScreen'), ring = $('#ring'), seal = $('#seal'),
     turnInfo = $('#turnInfo'), promptEl = $('#prompt'), idStats = $('#idStats'),
-    discardCorner = $('#discardCorner'),
+    fallenRow = $('#fallenRow'), discardCorner = $('#discardCorner'),
     selfArea = $('#selfArea'), logList = $('#logList'), actionBar = $('#actionBar'),
     cardDetail = $('#cardDetail'), overlay = $('#overlay');
 
@@ -174,15 +175,22 @@ QYS.ui.create = function (root) {
     const g = view.game;
     if (!g) return;
 
-    // 座位围成一圈：观察者永远在 6 点位，下家（seat+1）在右手侧，沿逆时针依次排开
-    const n = g.players.length;
-    const meSeat = g.humanSeat ?? 0;
+    // 座位围成一圈：观察者永远在 6 点位，下家（seat+1）在右手侧，沿逆时针依次排开。
+    // 阵亡者离场：环只由存活玩家组成（与距离规则一致），阵亡者在顶部名单展示。
+    const alivePs = g.players.filter(p => p.alive);
+    const anchorSeat = g.humanSeat ?? 0;
+    const anchor = alivePs.find(p => p.seat === anchorSeat) || alivePs[0] || g.players[0];
+    const n = Math.max(alivePs.length, 1);
+    const idx = new Map(alivePs.map((p, i) => [p, i]));
+    const anchorIdx = idx.has(anchor) ? idx.get(anchor) : 0;
     const pos = p => {
-      const rel = (p.seat - meSeat + n) % n;
+      const rel = ((idx.get(p) ?? anchorIdx) - anchorIdx + n) % n;
       const a = (90 - rel * 360 / n) * Math.PI / 180;
       return { x: 50 + 40 * Math.cos(a), y: 46 + 33 * Math.sin(a) };
     };
-    ring.innerHTML = g.players.map(p => playerHtml(p, pos(p))).join('');
+    ring.innerHTML = alivePs.map(p => playerHtml(p, pos(p))).join('');
+    fallenRow.innerHTML = g.players.filter(p => !p.alive)
+      .map(p => `<span class="chip fallenChip">${p.name}·${ID_NAME[p.identity] || ''} 阵亡</span>`).join('');
 
     const cur = g.players[g.currentIdx];
     const entries = discardEntries(g);

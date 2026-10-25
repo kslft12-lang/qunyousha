@@ -64,5 +64,18 @@ async function play(n) {
     me.equips.weapon = { defId: 'qinglong', suit: '♠', number: 5 };
     if (shaDef.canUse(g, me)) throw new Error('非连弩武器每回合限一杀');
     console.log('装备机制检查 ✓（射程/连弩/±1马）');
+
+    // 阵亡离场距离检查：两人之间的角色死亡后，环收拢、距离-1
+    {
+      const g2 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
+      const [p0, p1, p2] = g2.players;
+      if (g2.distance(p0, p2) !== 2) throw new Error('初始甲-丙距离应为2');
+      p1.alive = false; // 乙阵亡，甲丙相邻
+      if (g2.distance(p0, p2) !== 1) throw new Error('乙阵亡后甲-丙应为邻座距离1');
+      g2.players[3].alive = false; // 丁也阵亡
+      if (g2.distance(p0, p2) !== 1) throw new Error('多个阵亡后存活环距离计算错误');
+      if (g2.distance(p0, g2.players[4]) !== 1) throw new Error('甲-戊在存活环上应相邻');
+      console.log('阵亡离场距离检查 ✓（座位收拢）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

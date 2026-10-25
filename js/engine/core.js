@@ -158,10 +158,12 @@ QYS.core = QYS.core || {};
     };
 
     // ---- 距离与范围 ----
+    // 环距离在"存活玩家环"上计算：阵亡者离场、座位收拢（三国杀规则）
     game.distance = (a, b) => {
-      const n = game.players.length;
-      const ring = Math.abs(a.seat - b.seat);
-      let d = Math.min(ring, n - ring);
+      const alive = game.players.filter(p => p.alive);
+      const n = alive.length;
+      const ia = alive.indexOf(a), ib = alive.indexOf(b);
+      let d = n > 1 ? Math.min(Math.abs(ia - ib), n - Math.abs(ia - ib)) : 1;
       if (b.equips.horsePlus) d += 1;
       if (a.equips.horseMinus) d -= 1;
       return Math.max(1, d);
