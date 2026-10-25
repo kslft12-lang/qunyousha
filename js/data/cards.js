@@ -382,8 +382,8 @@ QYS.data.cards = [
       }
       for (const c of skipped) g.deck.unshift(c); // 翻过的非目标牌压回堆底
       if (got) {
-        user.hand.push(got);
-        g.log(`${user.name} 吃下【猴头菇】，抽到了一张${typeNames[type]}`, 'use');
+        g.log(`${user.name} 吃下【猴头菇】，抽到了${QYS.cardLabel(got)}`, 'use');
+        await g.takeDrawnCard(user, got); // 与摸牌同规则：亚撒西/orange 的抽到转化
       } else g.log(`${user.name} 吃下【猴头菇】，但牌堆中没有${typeNames[type]}`, 'system');
       g.update();
     },

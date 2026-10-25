@@ -182,27 +182,33 @@ QYS.core = QYS.core || {};
       }
       return game.deck.pop();
     };
+    // 单张牌"抽到"入手（含亚撒西/orange 的抽到转化）；返回 false 表示已转化未入手。
+    // drawCards 与猴头菇的定向抽取共用，保证转化技能对所有抽牌生效。
+    game.takeDrawnCard = async (p, c) => {
+      // 【亚撒西】抽到杀 → 弃置并改为摸两张（每回合限一次）
+      if (game.hasSkill(p, 'sk_yasaxi') && c.defId === 'sha' && p.yasaxiTurn !== game.turnCount) {
+        p.yasaxiTurn = game.turnCount;
+        game.toDiscard(c, p, '弃置');
+        game.log(`${p.name} 的【亚撒西】触发：弃置${QYS.cardLabel(c)}，改为摸两张牌`, 'skill');
+        await game.drawCards(p, 2);
+        return false;
+      }
+      // 【orange】抽到桃 → 自动弃置并转化为 2 个 orange
+      if (game.hasSkill(p, 'sk_orange') && c.defId === 'tao') {
+        p.oranges = (p.oranges || 0) + 2;
+        game.toDiscard(c, p, '转化');
+        game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges}）`, 'skill');
+        return false;
+      }
+      p.hand.push(c);
+      return true;
+    };
     game.drawCards = async (p, n) => {
       const got = [];
       for (let i = 0; i < n; i++) {
         const c = game.drawCard();
         if (!c) continue;
-        // 【亚撒西】抽到杀 → 弃置并改为摸两张（每回合限一次，替换抽到的牌继续走本规则的其他转化）
-        if (game.hasSkill(p, 'sk_yasaxi') && c.defId === 'sha' && p.yasaxiTurn !== game.turnCount) {
-          p.yasaxiTurn = game.turnCount;
-          game.toDiscard(c, p, '弃置');
-          game.log(`${p.name} 的【亚撒西】触发：弃置${QYS.cardLabel(c)}，改为摸两张牌`, 'skill');
-          await game.drawCards(p, 2);
-          continue;
-        }
-        // 【orange】抽到桃 → 自动弃置并转化为 2 个 orange
-        if (game.hasSkill(p, 'sk_orange') && c.defId === 'tao') {
-          p.oranges = (p.oranges || 0) + 2;
-          game.toDiscard(c, p, '转化');
-          game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges}）`, 'skill');
-          continue;
-        }
-        p.hand.push(c); got.push(c);
+        if (await game.takeDrawnCard(p, c)) got.push(c);
       }
       if (got.length) { game.log(`${p.name} 摸了 ${got.length} 张牌`, 'system'); game.update(); }
       return got;
@@ -446,6 +452,7 @@ QYS.core = QYS.core || {};
       if (armorId === 'baiyinshizi' && amount > 1) {
         game.log(`${target.name} 的【白银狮子】将 ${amount} 点伤害削减为 1 点`, 'skill');
         amount = 1;
+        payload.amount = 1; // 同步载荷，后续钩子读到的是实际伤害
       }
       // 护心镜：受到不小于体力值的伤害时，可弃置之防止此伤害
       if (armorId === 'huxinjing' && amount >= target.hp

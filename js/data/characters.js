@@ -144,7 +144,8 @@ QYS.data.skills = {
         const a = await game.askTargets(p, { candidates: cands, min: 1, max: 1, hint: '【豆沙包】：选择执行命令的角色' });
         if (!a || !a.length) return;
         const src = a[0];
-        const tCands = game.othersAlive(src);
+        // 魅惑菇：被魅惑者无法对魅惑者出杀，强制命令同样不可指定
+        const tCands = game.othersAlive(src).filter(t => src.charmFrom !== t);
         if (!tCands.length) return;
         const b = await game.askTargets(p, { candidates: tCands, min: 1, max: 1, hint: `【豆沙包】：${src.name} 对谁使用【杀】？` });
         if (!b || !b.length) return;
