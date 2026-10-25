@@ -3,6 +3,18 @@
 globalThis.QYS = globalThis.QYS || {};
 QYS.ui = {};
 
+// 头像扩展名回退：png → jpeg → jpg → 首字圆徽（定义在全局供 img.onerror 调用，不在顶层触碰 DOM）
+QYS.avatarNext = function (img) {
+  const exts = ['png', 'jpeg', 'jpg'];
+  const i = Number(img.dataset.ai || 0);
+  if (i + 1 < exts.length) {
+    img.dataset.ai = String(i + 1);
+    img.src = `assets/characters/${img.dataset.cid}.${exts[i + 1]}`;
+  } else {
+    img.remove();
+  }
+};
+
 QYS.ui.create = function (root) {
   const { colorOf, numStr } = QYS.util;
   const ID_NAME = QYS.core.ID_NAME;
@@ -38,6 +50,7 @@ QYS.ui.create = function (root) {
 
   const dn = c => QYS.def(c).name;
   const cardKey = c => `${c.defId}|${c.suit}|${c.number}`;
+  const charOf = p => QYS.data.characters.find(c => c.id === p.charId);
   // 弃牌记录统一出口：本地引擎用 Map，联机快照直接带 discardEntries
   function discardEntries(g) {
     if (g.discardEntries) return g.discardEntries;
@@ -46,8 +59,9 @@ QYS.ui.create = function (root) {
 
   // ---- 渲染 ----
   function avatarHtml(p) {
-    // 图片约定：assets/characters/<id>.png；缺图时 onerror 移除 img，露出 data-initial 首字圆徽
-    return `<div class="avatar" data-initial="${p.name.slice(0, 1)}"><img src="assets/characters/${p.charId}.png" alt="" onerror="this.remove()"></div>`;
+    const ch = charOf(p);
+    // 图片约定：assets/characters/<id>.png|.jpeg|.jpg；全部缺失时 onerror 链最终移除 img，露出首字圆徽
+    return `<div class="avatar" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${p.charId}.png" alt="" data-ai="0" data-cid="${p.charId}" onerror="QYS.avatarNext(this)"></div>`;
   }
 
   function badgeHtml(p) {
@@ -91,16 +105,18 @@ QYS.ui.create = function (root) {
     // 编号 = 从主公（1号）起按行动顺序
     const n = g.players.length;
     const num = ((p.seat - (g.lordSeat ?? 0)) % n + n) % n + 1;
+    const ch = charOf(p);
+    const locked = g.isLocked ? g.isLocked(p) : !!p.locked;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
       ${avatarHtml(p)}
       <div class="pinfo">
         <div class="pname"><span class="pnum">${num}号</span>${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
-        <div class="ptitle">${p.title}</div>
+        <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
-        <div class="chips">${tagChips(p)}</div>
+        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}</div>
         <div class="skRow"><span class="lbl">技能</span>${skChips || '<span class="lbl">无</span>'}</div>
       </div>
       ${hang ? `<div class="hangRow">${hang}</div>` : ''}
@@ -343,6 +359,7 @@ QYS.ui.create = function (root) {
 
   view.showSplash = g => {
     const me = g.players[g.humanSeat];
+    const ch = charOf(me) || {};
     const sk = me.skillIds.map(id => {
       const s = QYS.data.skills[id];
       return `<div class="sk"><b>【${s.name}】</b>（${s.type === 'active' ? '主动技' : '触发技'}）${s.desc}</div>`;
@@ -350,8 +367,8 @@ QYS.ui.create = function (root) {
     overlay.innerHTML = `<div class="panel">
       <h2>你的身份</h2>
       <div class="bigId ${ID_CLS[me.identity]}">${ID_NAME[me.identity]}</div>
-      <h2>你的武将</h2>
-      <div class="bigChar">${me.name} · ${me.title}　体力 ${me.maxHp}</div>
+      <h2>你的昵称 / 武将</h2>
+      <div class="bigChar">${me.name} · ${ch.name || ''}（${ch.title || ''}）　体力 ${me.maxHp}</div>
       ${sk}
       <button class="btn primary" data-act="continue">进入游戏</button>
     </div>`;

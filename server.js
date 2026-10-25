@@ -181,10 +181,15 @@ function startGame(room, playerCount) {
   const seatConn = [];
   let humans = 0;
   for (const [conn, seat] of room.conns) if (seat < playerCount) { seatConn[seat] = conn; humans++; }
+  // 昵称：真人用加入时的昵称，机器人按座位顺序编号
+  const names = [];
+  let botSeq = 0;
+  for (let s = 0; s < playerCount; s++) names[s] = seatConn[s] ? seatConn[s].name : `机器人${++botSeq}`;
   room.game = QYS.core.createGame({
     playerCount,
     humanSeat: null,
     lordSeat,
+    names,
     ioFor: p => (seatConn[p.seat] && !room.disconnected.has(p.seat)) ? netIoFor(room, seatConn[p.seat], p.seat) : QYS.bot.io(),
   });
   room.game.view = { render: () => broadcastStates(room) };
@@ -297,8 +302,17 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
-    res.end(data);
+    // 协商缓存：带 Last-Modified + no-cache，保证改完代码刷新页面即拿到新文件
+    fs.stat(file, (e2, stat) => {
+      const mtime = e2 ? null : stat.mtime.toUTCString();
+      if (mtime && req.headers['if-modified-since'] === mtime) { res.writeHead(304); return res.end(); }
+      res.writeHead(200, {
+        'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+        'Last-Modified': mtime || '',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(data);
+    });
   });
 });
 

@@ -8,6 +8,8 @@ QYS.rules = {};
   // 某张牌在出牌阶段能否被使用，以及合法目标
   QYS.rules.playInfo = function (game, p, card) {
     const d = def(card);
+    // 小学生战争：被锁玩家只能使用【杀】（闪本身不可主动使用）
+    if (game.isLocked(p) && d.id !== 'sha') return { ok: false, targets: [] };
     if (d.noPlay) return { ok: false, targets: [] };
     if (d.type === 'equip') return { ok: true, targets: [] };
     if (d.type === 'delayed') {
@@ -22,6 +24,7 @@ QYS.rules = {};
   };
 
   function activeSkill(game, p) {
+    if (game.isLocked(p)) return null; // 小学生战争：主动技封印（被动仍生效）
     for (const id of p.skillIds) {
       const sk = QYS.data.skills[id];
       if (sk && sk.type === 'active' && !p.turn.skillUsed && (!sk.canUse || sk.canUse(game, p))) return sk;
@@ -143,6 +146,7 @@ QYS.rules = {};
   async function turn(game, p) {
     game.turnCount++;
     p.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+    if (game.warLock && game.warLock.a === p) game.warLock = null; // 下一次轮到自己，小学生战争结束
     game.phase = '回合开始';
     const who = p.seat === game.humanSeat ? '（你）' : '';
     game.log(`── 第 ${game.turnCount} 回合：${p.name}${who} ──`, 'turn');

@@ -74,8 +74,8 @@ qunyousha/
    ```
 3. **技能**：在 `QYS.data.skills` 里定义技能（两个示例已演示两种类型）：
    ```js
-   sk_xxx: {
-     name: '技能名', type: 'active',   // active 主动技 | trigger 触发技
+   sk_xueshengzhanzheng: {
+     name: '小学生战争', type: 'active',   // active 主动技 | trigger 触发技
      desc: '技能描述',
      canUse(game, p) { ... },          // 主动技：能否发动
      async exec(game, p) { ... },      // 主动技：结算，返回 true 消耗次数

@@ -36,7 +36,7 @@ QYS.core = QYS.core || {};
     return shuffle(deck);
   }
 
-  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, lordSeat = 0, ioFor } = {}) {
+  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, lordSeat = 0, names, ioFor } = {}) {
     const game = {};
     // 主公坐 lordSeat（抢主公的结算结果），其余身份随机分配
     lordSeat = ((lordSeat % playerCount) + playerCount) % playerCount;
@@ -55,7 +55,8 @@ QYS.core = QYS.core || {};
       const ch = chars[seat % chars.length];
       const maxHp = ch.hp + (identity === '主' && playerCount > 2 ? 1 : 0);
       const p = {
-        seat, identity, charId: ch.id, name: ch.name, title: ch.title, skillIds: ch.skills,
+        seat, identity, charId: ch.id, charName: ch.name, name: (names && names[seat]) || ch.name,
+        title: ch.title, skillIds: ch.skills,
         maxHp, hp: maxHp,
         hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null }, judges: [],
         alive: true, revealed: identity === '主', turn: null, io: null,
@@ -74,7 +75,11 @@ QYS.core = QYS.core || {};
     game.phase = null;
     game.over = false;
     game.winner = null;
+    game.warLock = null; // 小学生战争：{a, b} 被锁的双方
     game.view = null; // 由界面层注入 { render() }
+
+    // 小学生战争生效中：p 是被锁的一方（只能用/打出【杀】【闪】）
+    game.isLocked = p => !!(game.warLock && (game.warLock.a === p || game.warLock.b === p));
 
     // ---- 日志 / 刷新 ----
     game.log = (text, type = 'system') => {
@@ -165,10 +170,16 @@ QYS.core = QYS.core || {};
     // ---- 问答（引擎与决策者之间的唯一通道，人类/机器人同一接口）----
     game.askCard = async (p, opts) => {
       if (!p.alive || !p.io) return null;
+      // 小学生战争：被锁玩家无法使用/打出【杀】【闪】以外的牌（弃牌等非使用操作不受影响）
+      if (game.isLocked(p) && opts.tag && opts.tag !== '弃牌' && opts.tag !== '技能') {
+        const asked = QYS.data.cards.find(c => c.name === opts.tag);
+        if (asked && asked.id !== 'sha' && asked.id !== 'shan') return null;
+      }
       return p.io.chooseCard(p, opts);
     };
     game.askBool = async (p, hint, extra = {}) => {
       if (!p.alive || !p.io) return false;
+      if (game.isLocked(p) && extra.tag === '无懈') return false; // 被锁玩家不能无懈
       return p.io.chooseBool(p, { hint, ...extra });
     };
     game.askTargets = async (p, opts) => {
@@ -270,6 +281,7 @@ QYS.core = QYS.core || {};
     game.die = async (t, source) => {
       t.alive = false;
       t.revealed = true;
+      if (game.warLock && game.warLock.a === t) game.warLock = null; // 发动者死亡，小学生战争提前结束
       dropAll(t);
       game.log(`${t.name} 阵亡，身份是【${ID_NAME[t.identity]}】`, 'system');
       if (t.seat === game.humanSeat) game.log('你已阵亡，进入观战模式', 'system');
@@ -341,10 +353,11 @@ QYS.core = QYS.core || {};
         return { card: { ...c }, by: i.by || '未知', seat: i.seat ?? null, via: i.via || '' };
       }),
       players: game.players.map(p => ({
-        seat: p.seat, name: p.name, title: p.title, charId: p.charId,
+        seat: p.seat, name: p.name, title: p.title, charId: p.charId, charName: p.charName,
         hp: p.hp, maxHp: p.maxHp, alive: p.alive, revealed: p.revealed,
         identity: (p.revealed || game.over || p.seat === seat) ? p.identity : null,
         skillIds: p.skillIds,
+        locked: game.isLocked(p),
         handCount: p.hand.length,
         hand: p.seat === seat ? p.hand.map(c => ({ ...c })) : undefined,
         equips: Object.fromEntries(Object.entries(p.equips).map(([k, c]) => [k, c ? { ...c } : null])),

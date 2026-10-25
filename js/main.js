@@ -15,10 +15,16 @@
     } else {
       lordSeat = (Math.random() * playerCount) | 0;
     }
+    // 昵称：人类用输入框（缺省"你"），机器人按座位顺序编号
+    const nick = ($('#nickName').value || '').trim() || '你';
+    const names = [];
+    let botSeq = 0;
+    for (let s = 0; s < playerCount; s++) names[s] = s === humanSeat ? nick : `机器人${++botSeq}`;
     game = QYS.core.createGame({
       playerCount,
       humanSeat,
       lordSeat,
+      names,
       ioFor: p => (p.seat === humanSeat ? view.io : QYS.bot.io()),
     });
     view.attach(game);
