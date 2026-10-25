@@ -381,6 +381,17 @@ QYS.ui.create = function (root) {
     if (view.pinnedKey) { view.pinnedKey = null; cardDetail.hidden = true; }
     const cardEl = e.target.closest('[data-card-idx]');
     if (cardEl) { handleCardClick(+cardEl.dataset.cardIdx); return; }
+    // 触屏：点装备/判定区悬挂牌 → 固定查看其效果（桌面用悬浮；不再冒泡成选人）
+    const hangEl = e.target.closest('.card.hang');
+    if (hangEl && isTouch) {
+      const html = detailHtml(hangEl);
+      if (html) {
+        view.pinnedKey = detailKey(hangEl);
+        cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
+        cardDetail.hidden = false;
+      }
+      return;
+    }
     const plEl = e.target.closest('.player[data-seat]');
     if (plEl) { handleSeatClick(+plEl.dataset.seat); return; }
   });

@@ -538,5 +538,28 @@ async function play(n) {
       if (yi.turn.skipDraw) throw new Error('♣判定不应跳过摸牌阶段');
       console.log('装备扩展检查 ✓（兵粮寸断/仁王盾/藤甲/白银狮子/护心镜/青釭剑/古锭刀/贯石斧/方天画戟/麒麟弓）');
     }
+
+    // 酒杀检查：酒+1只作用于下一张杀（命中与否均消耗），不叠加、不跨回合残留
+    {
+      const g15 = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙'], ioFor: () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets(p, o) { return o.candidates.slice(0, o.max || 1); }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} }) });
+      const [jia, yi] = g15.players;
+      jia.skillIds = []; yi.skillIds = [];
+      jia.hand.length = 0; yi.hand.length = 0; // 靶子无闪
+      const sha15 = QYS.data.cards.find(c => c.id === 'sha');
+      jia.turn = { shaUsed: 0, wine: true, skipPlay: false, skipDraw: false, skillUsed: false }; // 已喝酒
+      await sha15.effect(g15, { user: jia, targets: [yi], card: { defId: 'sha', suit: '♠', number: 7 } });
+      if (yi.hp !== yi.maxHp - 2) throw new Error('酒杀应造成2点伤害，实际 ' + (yi.maxHp - yi.hp));
+      if (jia.turn.wine !== false) throw new Error('酒应在下一张杀后消耗');
+      await sha15.effect(g15, { user: jia, targets: [yi], card: { defId: 'sha', suit: '♠', number: 8 } });
+      if (yi.hp !== yi.maxHp - 3) throw new Error('第二张杀应为1点伤害（酒不残留），实际剩 ' + yi.hp);
+      // 回合重置：turn() 每回合重建 p.turn（wine:false），此处验证新回合对象默认无酒
+      jia.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
+      const jiu15 = QYS.data.cards.find(c => c.id === 'jiu');
+      if (!jiu15.canUse(g15, jia)) throw new Error('满血未喝酒时应可饮【酒】');
+      await jiu15.effect(g15, { user: jia, card: { defId: 'jiu', suit: '♦', number: 9 } });
+      if (jia.turn.wine !== true) throw new Error('满血饮酒应置酒标记');
+      if (jiu15.canUse(g15, jia)) throw new Error('满血已喝酒不应可再叠加');
+      console.log('酒杀检查 ✓（+1只作用下一杀/用后即耗/不可叠加/回合重置）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });
