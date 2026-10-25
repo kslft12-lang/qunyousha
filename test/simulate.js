@@ -150,6 +150,7 @@ async function play(n) {
       const g7 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['变', '甲', '乙', '丙', '丁'], ioFor: io7 });
       const me = g7.players[0], far = g7.players[2], other = g7.players[1];
       me.skillIds = ['sk_toilet', 'sk_tuokuzi'];
+      g7.players.slice(1).forEach(q => { q.skillIds = []; }); // 钉死他人技能：候选过滤（蘑菇不可选）不受随机角色影响
       me.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
       if (g7.distance(me, far) !== 2) throw new Error('初始距离应为2');
       far.equips.horsePlus = { defId: 'ma_def', suit: '♥', number: 3 }; // +1马 → 距离3
@@ -347,6 +348,90 @@ async function play(n) {
       await g12.damage({ source: g12.players[2], target: hao2, amount: 1, tag: '杀' });
       if (!hao2.alive || hao2.cockroachUsed) throw new Error('被桃救起不应消耗蟑螂回魂');
       console.log('阴暗爬行/蟑螂回魂检查 ✓（杀桃当闪/万箭可用/回魂一次/桃救不消耗）');
+    }
+
+    // 蘑菇检查：蘑菇生长/金针菇诅咒（塞入·不可选·到期·上厕所移出）/魅惑菇/毁灭菇/杏鲍菇/猴头菇/似乎有些触动
+    {
+      const io13 = () => ({
+        async chooseCard(p, o) { return p.hand.find(c => (o.filter ? o.filter(c) : true)) || null; },
+        async chooseBool() { return true; },
+        async chooseTargets(p, o) { return o.candidates.slice(0, o.max || 1); },
+        async askPlay() { return { type: 'end' }; }, log() {}, update() {},
+      });
+      const g13 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['菇', '甲', '乙', '丙', '丁'], ioFor: () => io13() });
+      const [gu, jia, yi, bing, ding] = g13.players;
+      gu.charId = 'mogu'; gu.skillIds = ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang']; // 钉死蘑菇与技能
+      jia.skillIds = []; yi.skillIds = []; bing.skillIds = []; ding.skillIds = [];
+      g13.players.forEach(q => { q.hand.length = 0; }); // 清手牌控制断言
+      const shroomIds = ['mehuogu', 'huimiegu', 'xingbaogu', 'houtougu'];
+      // 1) 回合开始：似乎有些触动（无牌可弃 → 额外摸1）+ 蘑菇生长（+1 张蘑菇牌）
+      await g13.emit('turnStart', { player: gu });
+      if (gu.hand.length !== 2) throw new Error('回合开始应共得 2 张牌（触动摸1+生长1），实际 ' + gu.hand.length);
+      if (!gu.hand.some(c => shroomIds.includes(c.defId))) throw new Error('蘑菇生长应生成蘑菇牌');
+      // 2) 金针菇诅咒：锦囊指定蘑菇为目标 → 使用者手牌被塞入金针菇
+      await g13.emit('becomeTarget', { user: jia, target: gu, card: { defId: 'juedou', suit: '♠', number: 6 } });
+      if (jia.hand.filter(c => c.defId === 'jinzhengu').length !== 1) throw new Error('被锦囊指定应塞入一张金针菇');
+      // 3) 金针菇不可被选中：askCard 过滤后只能拿到普通牌
+      jia.hand.push({ defId: 'shan', suit: '♦', number: 2 });
+      const pick13 = await g13.askCard(jia, { filter: () => true, tag: '技能', hint: '' });
+      if (!pick13 || pick13.defId !== 'shan') throw new Error('askCard 应过滤金针菇');
+      // 4) 三个自己的回合后自动移出
+      g13.tickCurse(jia); g13.tickCurse(jia);
+      if (!jia.hand.some(c => c.defId === 'jinzhengu')) throw new Error('金针菇不应提前消失');
+      if (g13.tickCurse(jia) !== 1 || jia.hand.some(c => c.defId === 'jinzhengu')) throw new Error('金针菇应于第3回合移出');
+      // 5) 一起上厕所：不可选蘑菇；被选中者金针菇立即移出
+      jia.hand.push({ defId: 'jinzhengu', suit: '♠', number: 3 });
+      yi.skillIds = ['sk_toilet']; yi.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+      const okToilet = await QYS.data.skills.sk_toilet.exec(g13, yi);
+      if (!okToilet || g13.toilet.b !== jia) throw new Error('一起上厕所应跳过蘑菇选下一名角色');
+      if (jia.hand.some(c => c.defId === 'jinzhengu')) throw new Error('被上厕所选中应立即移出金针菇');
+      g13.toilet = null; yi.skillIds = [];
+      // 6) 魅惑菇：目标无法将使用者选为杀目标
+      g13.players.forEach(q => { q.hand.length = 0; });
+      const mehuo = QYS.data.cards.find(c => c.id === 'mehuogu');
+      await mehuo.effect(g13, { user: jia, targets: [yi], card: { defId: 'mehuogu', suit: '♠', number: 5 } });
+      if (yi.charmFrom !== jia) throw new Error('魅惑菇应施加魅惑标记');
+      const shaDef13 = QYS.data.cards.find(c => c.id === 'sha');
+      const cands13 = shaDef13.target.candidates(g13, yi);
+      if (cands13.includes(jia)) throw new Error('被魅惑者不应可选使用者作为杀目标');
+      if (!cands13.includes(bing)) throw new Error('其他角色应仍可选');
+      yi.charmFrom = null;
+      // 7) 毁灭菇：前后邻座+自己各3伤；蘑菇免疫
+      g13.players.forEach(q => { q.hand.length = 0; q.hp = q.maxHp; });
+      const huimie = QYS.data.cards.find(c => c.id === 'huimiegu');
+      await huimie.effect(g13, { user: jia, targets: [], card: { defId: 'huimiegu', suit: '♠', number: 7 } });
+      if (gu.hp !== gu.maxHp) throw new Error('蘑菇应免疫毁灭菇');
+      if (yi.hp !== yi.maxHp - 3 || jia.hp !== jia.maxHp - 3) throw new Error('邻座与使用者应各受3点伤害');
+      if (bing.hp !== bing.maxHp || ding.hp !== ding.maxHp) throw new Error('非相邻者不应受伤');
+      // 8) 杏鲍菇：自己回复2点
+      gu.hp = 2;
+      const xingbao = QYS.data.cards.find(c => c.id === 'xingbaogu');
+      await xingbao.effect(g13, { user: gu, targets: [gu], card: { defId: 'xingbaogu', suit: '♥', number: 3 } });
+      if (gu.hp !== 4) throw new Error('杏鲍菇应回复2点体力，实际 ' + gu.hp);
+      // 9) 猴头菇：选类型抽牌，翻过的牌压回堆底
+      const seq13 = [
+        { defId: 'ma_atk', suit: '♣', number: 9 },  // 装备（非目标，压底）
+        { defId: 'sha', suit: '♠', number: 7 },     // 基本（命中）
+      ];
+      const realDraw13 = g13.drawCard;
+      g13.drawCard = () => seq13.shift() || null;
+      gu.hand.length = 0;
+      const houtou = QYS.data.cards.find(c => c.id === 'houtougu');
+      await houtou.effect(g13, { user: gu, targets: [gu], card: { defId: 'houtougu', suit: '♣', number: 4 } });
+      g13.drawCard = realDraw13;
+      if (!gu.hand.some(c => c.defId === 'sha')) throw new Error('猴头菇应抽到所选基本牌');
+      if (g13.deck[0]?.defId !== 'ma_atk') throw new Error('翻过的非目标牌应压回堆底');
+      // 10) 似乎有些触动：弃置一名角色的一张牌
+      g13.players.forEach(q => { q.hand.length = 0; });
+      jia.hand.push({ defId: 'shan', suit: '♦', number: 5 });
+      await QYS.data.skills.sk_chudong.hooks.turnStart(g13, gu, { player: gu });
+      if (jia.hand.length !== 0) throw new Error('似乎有些触动应弃置目标一张牌');
+      // 11) 隐身不阻挡对自己使用杏鲍菇
+      yi.skillIds = ['sk_yinshen']; // yi 在步骤7中已受伤，满足 canUse
+      const info13 = QYS.rules.playInfo(g13, yi, { defId: 'xingbaogu', suit: '♠', number: 4 });
+      if (!info13.ok || !info13.targets.includes(yi)) throw new Error('隐身角色应可对自己使用杏鲍菇');
+      yi.skillIds = [];
+      console.log('蘑菇检查 ✓（生长/诅咒塞入·不可选·到期·上厕所移出/魅惑禁攻/毁灭免疫/杏鲍菇回2/猴头菇抽类型/触动弃牌）');
     }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

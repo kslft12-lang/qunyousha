@@ -15,8 +15,8 @@
     } else {
       lordSeat = (Math.random() * playerCount) | 0;
     }
-    // 昵称：人类用输入框（缺省"你"），机器人按座位顺序编号
-    const nick = ($('#nickName').value || '').trim() || '你';
+    // 昵称：人类用输入框（缺省"你"，过滤 HTML 字符防注入界面），机器人按座位顺序编号
+    const nick = ($('#nickName').value || '').replace(/[<>&"']/g, '').trim() || '你';
     const names = [];
     let botSeq = 0;
     for (let s = 0; s < playerCount; s++) names[s] = s === humanSeat ? nick : `机器人${++botSeq}`;

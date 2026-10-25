@@ -6,7 +6,7 @@
 
 - **在线单机**：开启 GitHub Pages 后访问 `https://kslft12-lang.github.io/qunyousha/`（开启方法见下方「部署」），单机 / 全机器人演示 / 图鉴都能玩
 - **单机（本地）**：直接双击 `index.html`
-- **联机**：`node server.js [端口]`（默认 8123）。所有人浏览器打开 `http://<主机IP>:8123`，点「联机」输入昵称进入大厅；房主（0 号位）选人数点「开始联机对局」，空座位由机器人代打。服务器是权威引擎：客户端只收按座位裁剪的快照（别人的手牌/暗置身份不可见），决策经 WebSocket 回传；有人掉线时其座位自动转为机器人应答（90 秒超时兜底）
+- **联机**：`node server.js [端口]`（默认 8123）。所有人浏览器打开 `http://<主机IP>:8123`，点「联机」输入昵称：房主点「创建新房间」得到 4 位房间码，群友凭码加入；房主选人数点「开始联机对局」，空座位由机器人代打。服务器是权威引擎：客户端只收按座位裁剪的快照（别人的手牌/暗置身份不可见），决策经 WebSocket 回传；有人掉线时其座位立即转为机器人代打（90 秒无应答亦有超时兜底），对局开始后加入的人为观战
 
 ## 部署
 
@@ -14,7 +14,7 @@
 
 1. 下载 [cloudflared Windows 版](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe) 放到 `tools/cloudflared.exe`（`tools/` 不入库；换电脑时重新下载）
 2. 双击 **`start-online.bat`**：同时启动游戏服务器（`node server.js 8123`）和公网隧道
-3. 隧道窗口出现 `https://xxxx-xxxx.trycloudflare.com`，发到群里——群友打开点「联机」进大厅，房主（先加入者）开局，空座位机器人代打
+3. 隧道窗口出现 `https://xxxx-xxxx.trycloudflare.com`，发到群里——群友打开点「联机」，房主「创建新房间」把 4 位房间码发到群里，群友凭码加入；房主开局，空座位机器人代打
 
 注意：快速隧道**每次重启网址都会变**，你电脑关机就进不去；要固定网址可换花生壳/cpolar（实名、不要卡）或升级 Cloudflare 命名隧道。想 7×24 不依赖自己开机，用下面的云托管。
 
@@ -33,7 +33,7 @@
 3. 配置页：Region 随意，Instance Type 选 `Free`，Start Command 留空（自动用 package.json 的 `npm start`）→ `Create Web Service`
 4. 构建完成后得到固定公网网址（`https://qunyousha-xxxx.onrender.com`）。免费档 15 分钟无人访问会休眠，唤醒等 30~60 秒；部分新账号要求验证卡片，遇到就换 Zeabur/Back4App 试或退回主方案
 
-通用注意：服务器是"单房间、无鉴权"的框架实现，知道地址即可进入（对局开始后加入为观战）。
+通用注意：服务器支持多个并行房间（4 位房间码区分），无鉴权：知道地址与房间码即可进入（对局开始后加入为观战）。
 
 ## 玩法
 
@@ -109,10 +109,10 @@ qunyousha/
 ## 测试
 
 ```
-node test/simulate.js
+npm test                    # = 以下两项
+node test/simulate.js       # 全机器人跑通 5 人局×5 + 2 人局 + 8 人局 + 技能/装备/快照隐私断言
+node test/smoke-server.js   # 联机服务器冒烟测试：建房/加入/错误码、快照隐私、观战座位、okKeys、断线机器人接管
 ```
-
-全机器人跑通 5 人局×5 + 2 人局 + 8 人局，全部到达终局即通过。
 
 ## 已简化的规则（代码中均标有 `TODO(规则)`）
 

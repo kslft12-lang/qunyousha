@@ -78,6 +78,7 @@ button { font-family: inherit; cursor: pointer; }
 .btn.skill { border-color: var(--red); color: #e8a79f; }
 .btn.skill:hover { border-color: var(--red); background: #3a1a15; color: #ffd9d3; }
 .btn:disabled { opacity: .4; cursor: default; }
+.btns { flex-wrap: wrap; justify-content: center; }
 
 /* ---------- 牌局布局 ---------- */
 #gameScreen {
@@ -132,6 +133,12 @@ button { font-family: inherit; cursor: pointer; }
 .player.selectable { border-color: var(--gold-hi); border-style: dashed; animation: pulse 1.2s infinite; }
 .player.selected { border-color: var(--red); border-style: solid; box-shadow: 0 0 10px #c23b2e66; }
 .player.dead { filter: grayscale(1); opacity: .45; }
+/* 7~8 人局：环上武将牌紧凑化（ui.js 在 ring 上加 .crowd） */
+#ring.crowd .player { width: 152px; padding: 8px; gap: 8px; }
+#ring.crowd .avatar { width: 40px; height: 40px; font-size: 20px; }
+#ring.crowd .pname { font-size: 15px; }
+#ring.crowd .ptitle { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ring.crowd .skRow { display: none; }
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 #e8cd7f00; }
   50% { box-shadow: 0 0 12px #e8cd7f88; }
@@ -320,6 +327,7 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--paper); color: #2a2418;
   border: 3px double var(--gold); border-radius: 12px;
   padding: 28px 40px; max-width: 520px;
+  max-height: 86vh; overflow-y: auto;
   text-align: center;
   box-shadow: 0 12px 40px #000000cc;
 }
@@ -338,13 +346,8 @@ button { font-family: inherit; cursor: pointer; }
 #overlay .idTable th, #overlay .idTable td { padding: 6px 18px; border-bottom: 1px solid #d8cbaa; font-size: 14px; }
 #overlay pre { text-align: left; font-size: 11px; max-width: 460px; max-height: 300px; overflow: auto; }
 
-/* ---------- 窄屏 ---------- */
-@media (max-width: 900px) {
-  #gameScreen { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; grid-template-areas: "table" "action" "log"; }
-  #logPanel { border-left: none; border-top: 1px solid #4a321f; max-height: 160px; }
-  #cardDetail { display: none; }
-  .player { width: 148px; }
-}
+/* ---------- 窄屏（平板竖屏等）：保留椭圆环，收窄武将牌 ---------- */
+/* （响应式规则统一放在文件末尾，保证能覆盖上文所有基础规则） */
 
 /* ---------- 图鉴 ---------- */
 #codex {
@@ -489,6 +492,7 @@ button { font-family: inherit; cursor: pointer; }
 .chip.rushChip { border-color: var(--red); color: #e8a79f; }
 .chip.warChip { border-color: var(--red); color: #ffb3a7; background: #3a1a15; }
 .chip.toiletChip { border-color: #4a8a8a; color: #a7d8d8; background: #12302e; }
+.chip.charmChip { border-color: #b04a8a; color: #f0b8d8; background: #2e1230; }
 .chip.ladderChip { border-color: #8a6a4a; color: #e0c8a0; background: #2e2318; }
 #lobbyOpts { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 #lobbyOpts[hidden] { display: none; }
@@ -518,4 +522,68 @@ button { font-family: inherit; cursor: pointer; }
   margin-left: 8px; padding: 6px 10px; width: 120px;
   background: var(--wood); color: var(--paper);
   border: 1px solid #4a6a58; border-radius: 6px;
+}
+
+/* ================= 响应式（置于文件末尾以覆盖上文所有规则） ================= */
+
+/* 平板窄屏：保留椭圆环，仅收窄武将牌 */
+@media (max-width: 900px) {
+  #gameScreen { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; grid-template-areas: "table" "action" "log"; }
+  #logPanel { border-left: none; border-top: 1px solid #4a321f; max-height: 150px; }
+  .player { width: 148px; }
+}
+
+/* 触屏：无悬浮，卡牌/技能详情改为底部抽屉（点卡固定、再点取消仍可用） */
+@media (hover: none), (pointer: coarse) {
+  #cardDetail {
+    left: 12px; right: 12px; width: auto;
+    bottom: calc(118px + env(safe-area-inset-bottom));
+    max-height: 42vh; overflow-y: auto;
+  }
+}
+
+/* 手机竖屏 / 矮窗口：放弃椭圆环，武将牌改紧凑网格，避免头像互相压叠 */
+@media (max-width: 700px), (max-height: 620px) {
+  #startScreen h1 { font-size: clamp(44px, 14vw, 72px); }
+  #seal { display: none; }
+
+  #tableArea { display: flex; flex-direction: column; padding-top: 40px; }
+  #idStats { top: 8px; right: 8px; }
+  #fallenRow { top: 8px; left: 8px; max-width: 55%; }
+  #centerBar { position: static; order: -1; transform: none; width: auto; gap: 2px; padding: 0 10px; }
+  #ring {
+    position: relative; inset: auto; order: 1;
+    flex: 1; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px; align-content: start;
+    padding: 4px 8px 118px; /* 底部留出手牌区，末行不被遮挡 */
+  }
+  .player.ringP {
+    position: static !important; left: auto !important; top: auto !important;
+    transform: none !important; width: auto !important;
+  }
+  .player { padding: 7px 8px; gap: 7px; }
+  .avatar { width: 40px; height: 40px; font-size: 20px; border-width: 1px; }
+  .pname { font-size: 14px; gap: 4px; }
+  .ptitle { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .skRow { display: none; }
+  .chip { font-size: 9px; padding: 0 5px; }
+  #ring .card.hang { width: 30px; height: 42px; }
+  #ring .card.hang .cname { font-size: 10px; }
+
+  #discardCorner { right: 8px; bottom: 110px; max-width: 88vw; }
+  #selfArea { padding: 4px 8px calc(8px + env(safe-area-inset-bottom)); z-index: 6; }
+  #handRow { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; min-height: 86px; }
+  #handRow .card.mini { width: 56px; height: 78px; flex: none; }
+  #handRow .card.mini .corner { font-size: 10px; }
+  #handRow .card.mini .cname { font-size: 15px; letter-spacing: 3px; }
+
+  #actionBar { padding: 6px; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 8px 16px; font-size: 14px; }
+  #logPanel { max-height: 120px; }
+  #overlay .panel { max-width: 92vw; padding: 20px 16px; }
+  #overlay pre { max-width: 82vw; }
+  #nickName, #startScreen select, #roomCode { font-size: 16px; } /* 防 iOS 聚焦自动放大 */
+  #startScreen .btns { flex-direction: column; width: min(260px, 80vw); }
 }

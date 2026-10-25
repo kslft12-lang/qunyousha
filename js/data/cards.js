@@ -27,10 +27,11 @@ QYS.data.cards = [
     target: {
       count: 1,
       candidates: (g, u) => {
-        const base = g.othersAlive(u).filter(t => g.inShaRange(u, t));
+        // 魅惑菇：被魅惑者（u.charmFrom 指向使用者）无法将其选为【杀】的目标
+        const base = g.othersAlive(u).filter(t => g.inShaRange(u, t) && u.charmFrom !== t);
         if (!g.hasSkill(u, 'sk_guantangbao')) return base;
         // 灌汤包：场上 1 血角色无视距离均可作为目标
-        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t));
+        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t);
         return [...base, ...extra];
       },
     },
@@ -143,7 +144,8 @@ QYS.data.cards = [
     desc: '其他所有角色需打出一张【杀】，否则受到1点伤害。',
     async effect(g, { user, card }) {
       for (const t of g.aoeOrder(user)) {
-        if (g.over || !t.alive) return;
+        if (g.over) return;
+        if (!t.alive) continue; // 目标列表是结算前快照，中途阵亡者跳过，其余目标继续
         if (await g.askWuxie({ user, card, target: t })) continue;
         const sha = await g.askResponse(t, '杀');
         if (sha) { g.discardFromHand(t, sha, '打出'); g.log(`${t.name} 打出了【杀】`, 'use'); }
@@ -156,7 +158,8 @@ QYS.data.cards = [
     desc: '其他所有角色需打出一张【闪】，否则受到1点伤害。',
     async effect(g, { user, card }) {
       for (const t of g.aoeOrder(user)) {
-        if (g.over || !t.alive) return;
+        if (g.over) return;
+        if (!t.alive) continue; // 目标列表是结算前快照，中途阵亡者跳过，其余目标继续
         if (await g.askWuxie({ user, card, target: t })) continue;
         if (!(await g.dodgeCheck(t, 'wanjian'))) await g.damage({ source: user, target: t, amount: 1, tag: '万箭齐发' });
       }
@@ -243,5 +246,79 @@ QYS.data.cards = [
   {
     id: 'ma_atk', name: '-1马', type: 'equip', slot: 'horseMinus', deckCount: 3,
     desc: '你计算与其他角色的距离-1。',
+  },
+
+  // ---- 蘑菇牌（均不进入初始牌堆：金针菇只能由【金针菇】技能置入，其余由【蘑菇生长】生成；用后进弃牌堆、可随弃牌堆洗回）----
+  {
+    id: 'jinzhengu', name: '金针菇', type: 'curse', deckCount: 0, noPlay: true,
+    desc: '诅咒牌。无法使用、打出或弃置，计入手牌上限；经过你自己的三个回合后自动移出游戏。你被【一起上厕所】选为目标时，其立即移出。只能通过【金针菇】技能进入手牌，移出后不进弃牌堆。',
+  },
+  {
+    id: 'mehuogu', name: '魅惑菇', type: 'trick', deckCount: 0,
+    desc: '出牌阶段，对你的攻击范围内的一名其他角色使用：直到其下个回合结束，其无法将你选为【杀】的目标。',
+    target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.inShaRange(u, t)) },
+    async effect(g, { user, targets, card }) {
+      const t = targets[0];
+      if (await g.askWuxie({ user, card, target: t })) return;
+      t.charmFrom = user;
+      g.log(`${t.name} 吃下了【魅惑菇】，其下个回合内无法对 ${user.name} 使用【杀】`, 'use');
+      g.update();
+    },
+  },
+  {
+    id: 'huimiegu', name: '毁灭菇', type: 'trick', deckCount: 0,
+    desc: '出牌阶段使用：你与相邻的两名角色各受到3点伤害（「蘑菇」无论是否为使用者均免疫此伤害）。',
+    async effect(g, { user, card }) {
+      const alive = g.alive();
+      if (alive.length < 2) return;
+      const i = alive.indexOf(user);
+      // 后一位、前一位、自己（两人局时前后均为对方，去重）
+      const zone = [...new Set([alive[(i + 1) % alive.length], alive[(i - 1 + alive.length) % alive.length], user])];
+      for (const t of zone) {
+        if (g.over) return;
+        if (!t.alive) continue;
+        if (t.charId === 'mogu') { g.log(`【毁灭菇】对 ${t.name} 无效（蘑菇免疫）`, 'skill'); continue; }
+        if (await g.askWuxie({ user, card, target: t })) continue;
+        await g.damage({ source: user, target: t, amount: 3, tag: '毁灭菇' });
+      }
+    },
+  },
+  {
+    id: 'xingbaogu', name: '杏鲍菇', type: 'trick', deckCount: 0,
+    desc: '出牌阶段对自己使用，回复2点体力。',
+    canUse: (g, u) => u.hp < u.maxHp,
+    target: { count: 1, candidates: (g, u) => [u] },
+    async effect(g, { user, card }) {
+      if (await g.askWuxie({ user, card, target: user })) return;
+      await g.heal(user, 2);
+    },
+  },
+  {
+    id: 'houtougu', name: '猴头菇', type: 'trick', deckCount: 0,
+    desc: '出牌阶段对自己使用：从基本/锦囊/装备牌中选择一种类型，从牌堆中抽取一张该类型的牌（翻过的牌压回堆底）。',
+    target: { count: 1, candidates: (g, u) => [u] },
+    async effect(g, { user, card }) {
+      if (await g.askWuxie({ user, card, target: user })) return;
+      const typeNames = { basic: '基本牌', trick: '锦囊牌', equip: '装备牌' };
+      // 类型选择复用确定/放弃问答：基本 → 锦囊 → 装备
+      let type = null;
+      if (await g.askBool(user, '【猴头菇】：抽取【基本牌】？', { cancelText: '选其他类型' })) type = 'basic';
+      else if (await g.askBool(user, '【猴头菇】：抽取【锦囊牌】？', { cancelText: '抽装备牌' })) type = 'trick';
+      else type = 'equip';
+      const skipped = [];
+      let got = null;
+      for (;;) {
+        const c = g.drawCard();
+        if (!c) break; // 牌堆与弃牌堆翻尽仍无该类型
+        if (QYS.def(c).type === type) { got = c; break; }
+        skipped.push(c);
+      }
+      for (const c of skipped) g.deck.unshift(c); // 翻过的非目标牌压回堆底
+      if (got) {
+        user.hand.push(got);
+        g.log(`${user.name} 吃下【猴头菇】，抽到了一张${typeNames[type]}`, 'use');
+      } else g.log(`${user.name} 吃下【猴头菇】，但牌堆中没有${typeNames[type]}`, 'system');
+      g.update();
+    },
   },
 ];

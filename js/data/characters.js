@@ -87,10 +87,16 @@ QYS.data.skills = {
         if (!src || !src.alive || src === p) return;
         if (src.hand.length && await game.askBool(src, `${p.name} 的【呜呜呜袜】：交给她一张手牌？（拒绝则此伤害无效）`, { tag: '技能' })) {
           const c = await game.askCard(src, { filter: () => true, tag: '弃牌', hint: '【呜呜呜袜】：交给对方一张手牌', cancelText: '随机交一张' });
-          const give = c && src.hand.includes(c) ? c : src.hand[(Math.random() * src.hand.length) | 0];
-          src.hand.splice(src.hand.indexOf(give), 1);
-          p.hand.push(give);
-          game.log(`${src.name} 交给 ${p.name} 一张手牌（呜呜呜袜）`, 'skill');
+          const giveables = src.hand.filter(x => x.defId !== 'jinzhengu'); // 金针菇无法交给他人
+          const give = c && src.hand.includes(c) ? c : giveables[(Math.random() * giveables.length) | 0];
+          if (!give) { // 手牌全是金针菇：无从可交，视为拒绝
+            payload.amount = 0;
+            game.log(`${p.name} 的【呜呜呜袜】令伤害无效`, 'skill');
+          } else {
+            src.hand.splice(src.hand.indexOf(give), 1);
+            p.hand.push(give);
+            game.log(`${src.name} 交给 ${p.name} 一张手牌（呜呜呜袜）`, 'skill');
+          }
         } else {
           payload.amount = 0;
           game.log(`${p.name} 的【呜呜呜袜】令伤害无效`, 'skill');
@@ -179,7 +185,7 @@ QYS.data.skills = {
     name: 'orange',
     type: 'active',
     desc: '每回合开始时你获得 1 个 orange；你抽到【桃】时自动弃置之并转化为 2 个 orange。出牌阶段你可以使用 orange：令任意角色（包括自己）回复 1 点体力，只要有 orange 就可以继续使用。',
-    canUse(game, p) { return p.oranges > 0; },
+    canUse(game, p) { return p.oranges > 0 && game.alive().some(q => q.hp < q.maxHp); },
     async exec(game, p) {
       const sel = await game.askTargets(p, {
         candidates: game.alive(), min: 1, max: 1,
@@ -213,15 +219,19 @@ QYS.data.skills = {
     name: '一起上厕所',
     type: 'active',
     freq: 'oncePerTurn',
-    desc: '出牌阶段限一次，你可以选择一名其他角色与你一起上厕所：直到你的下回合开始，你与其的距离互相强制为1（无视实际距离与坐骑，与其他角色的距离仍正常计算）。',
-    canUse(game, p) { return game.othersAlive(p).length > 0; },
+    desc: '出牌阶段限一次，你可以选择一名其他角色与你一起上厕所：直到你的下回合开始，你与其的距离互相强制为1（无视实际距离与坐骑，与其他角色的距离仍正常计算）。（不能选择拥有【金针菇】技能的角色；被选中者若有【金针菇】诅咒牌则立即移出）',
+    canUse(game, p) {
+      return game.othersAlive(p).some(t => !game.hasSkill(t, 'sk_jinzhengu')); // 蘑菇的【金针菇】：不可被选为目标
+    },
     async exec(game, p) {
       const sel = await game.askTargets(p, {
-        candidates: game.othersAlive(p), min: 1, max: 1,
-        hint: '【一起上厕所】：选择一起上厕所的角色（你们的距离将强制为1）',
+        candidates: game.othersAlive(p).filter(t => !game.hasSkill(t, 'sk_jinzhengu')),
+        min: 1, max: 1,
+        hint: '【一起上厕所】：选择一起上厕所的角色（你们的距离将强制为 1）',
       });
       if (!sel || !sel.length) return false;
       const t = sel[0];
+      game.voidAllCurse(t); // 被选中为目标：其手中的【金针菇】立即移出
       game.toilet = { a: p, b: t };
       game.log(`${p.name} 拉着 ${t.name} 一起上厕所！你们二人的距离强制为 1`, 'skill');
       // 上厕所要脱裤子：夺其防具入手（需同时拥有该技能）
@@ -278,10 +288,16 @@ QYS.data.skills = {
         const t = sel[0];
         if (t.hand.length && await game.askBool(t, `被 ${p.name} 的【梯子专家】盯上：交给他一张手牌？（拒绝则本回合你使用卡牌有一半概率失败）`, { tag: '技能' })) {
           const c = await game.askCard(t, { filter: () => true, tag: '弃牌', hint: `【梯子专家】：交给 ${p.name} 一张手牌`, cancelText: '随机交一张' });
-          const give = c && t.hand.includes(c) ? c : t.hand[(Math.random() * t.hand.length) | 0];
-          t.hand.splice(t.hand.indexOf(give), 1);
-          p.hand.push(give);
-          game.log(`${t.name} 交给了 ${p.name} 一张手牌`, 'skill');
+          const giveables = t.hand.filter(x => x.defId !== 'jinzhengu'); // 金针菇无法交给他人
+          const give = c && t.hand.includes(c) ? c : giveables[(Math.random() * giveables.length) | 0];
+          if (give) {
+            t.hand.splice(t.hand.indexOf(give), 1);
+            p.hand.push(give);
+            game.log(`${t.name} 交给了 ${p.name} 一张手牌`, 'skill');
+          } else { // 手牌全是金针菇：交不出，只能被盯上
+            t.ladderFail = true;
+            game.log(`${t.name} 无牌可交，本回合使用卡牌有一半概率失败（${p.name} 的【梯子专家】）`, 'skill');
+          }
         } else {
           t.ladderFail = true;
           game.log(`${t.name} 本回合使用卡牌有一半概率失败（${p.name} 的【梯子专家】）`, 'skill');
@@ -324,6 +340,79 @@ QYS.data.skills = {
       },
     },
   },
+
+  // 【蘑菇生长】：回合开始时随机生成一张蘑菇牌（金针菇除外）加入手牌。
+  // 蘑菇牌不进入初始牌堆；被使用/弃置后进入弃牌堆，可随弃牌堆洗回牌堆。
+  sk_mogushengzhang: {
+    name: '蘑菇生长',
+    type: 'trigger',
+    desc: '回合开始时，你随机生成一张蘑菇牌（魅惑菇/毁灭菇/杏鲍菇/猴头菇）加入手牌。（蘑菇牌不进入初始牌堆；被使用或弃置后进入弃牌堆，可随弃牌堆洗回）',
+    hooks: {
+      turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        const pool = ['mehuogu', 'huimiegu', 'xingbaogu', 'houtougu'];
+        const c = {
+          defId: pool[(Math.random() * pool.length) | 0],
+          suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0],
+          number: 1 + ((Math.random() * 13) | 0),
+        };
+        p.hand.push(c);
+        game.log(`${p.name} 的【蘑菇生长】：长出了一株${QYS.cardLabel(c)}`, 'skill');
+        game.update();
+      },
+    },
+  },
+
+  // 【似乎有些触动】：手牌上限+1（实现在 rules.js 弃牌阶段）；回合开始时二选一：弃一名角色一张牌 / 额外摸一张。
+  sk_chudong: {
+    name: '似乎有些触动',
+    type: 'trigger',
+    desc: '锁定技。你的手牌上限+1。回合开始时，你须选择一项：1.弃置一名角色区域里的一张牌；2.额外摸一张牌。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        const cands = game.alive().filter(q => game.anyCards(q));
+        const useDiscard = cands.length > 0
+          && await game.askBool(p, '是否发动【似乎有些触动】？【确定】弃置一名角色的一张牌；【放弃】改为额外摸一张牌', { tag: '技能' });
+        if (useDiscard) {
+          const sel = await game.askTargets(p, { candidates: cands, min: 1, max: 1, hint: '【似乎有些触动】：选择要弃牌的角色' });
+          const t = sel && sel[0];
+          if (t) {
+            const pick = game.randomZoneCard(t);
+            if (pick) {
+              game.removeZoneCard(t, pick);
+              game.toDiscard(pick.card, p, '弃置');
+              game.log(`${p.name} 发动【似乎有些触动】，弃置了 ${t.name} 区域的${QYS.cardLabel(pick.card)}`, 'skill');
+              game.update();
+              return;
+            }
+          }
+        }
+        await game.drawCards(p, 1);
+        game.log(`${p.name} 的【似乎有些触动】：额外摸了一张牌`, 'skill');
+      },
+    },
+  },
+
+  // 【金针菇】：不可被【一起上厕所】选为目标（实现在 sk_toilet）；被锦囊牌指定为目标时，
+  // 往使用者手牌塞入一张【金针菇】诅咒牌（生命周期见 core.js tickCurse/voidAllCurse）。
+  sk_jinzhengu: {
+    name: '金针菇',
+    type: 'trigger',
+    desc: '锁定技。你不能被【一起上厕所】选为目标。当你被锦囊牌指定为目标时，将一张【金针菇】置入该牌使用者的手牌：其无法使用、打出或弃置这张牌，该牌计入其手牌上限，经过其三个回合后移出游戏；若其被【一起上厕所】选为目标，该牌立即移出。',
+    hooks: {
+      async becomeTarget(game, p, payload) {
+        if (payload.target !== p || !payload.card) return;
+        const d = QYS.def(payload.card);
+        if (d.type !== 'trick' && d.type !== 'delayed') return;
+        const src = payload.user;
+        if (!src || !src.alive || src === p) return;
+        src.hand.push({ defId: 'jinzhengu', suit: '♠', number: 1 + ((Math.random() * 13) | 0) });
+        game.log(`${p.name} 的【金针菇】诅咒生效：${src.name} 的手牌中被塞入一株【金针菇】`, 'skill');
+        game.update();
+      },
+    },
+  },
 };
 
 QYS.data.characters = [
@@ -331,15 +420,14 @@ QYS.data.characters = [
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng', 'sk_yinpa', 'sk_zhanglang'] },
-  { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
+  { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
   { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
-  // TODO: 秋秋人头像待补 assets/characters/qiuqiu.png（当前显示首字圆徽）
   { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
-  // TODO: 颜文字小变态头像待补 assets/characters/yanwenzi.png（当前显示首字圆徽）
   { id: 'yanwenzi', name: '颜文字小变态', title: '群友', hp: 4, skills: ['sk_toilet', 'sk_tuokuzi'] },
   // TODO: 噜噜打汪头像待补 assets/characters/lulu.png（当前显示首字圆徽）
   { id: 'lulu', name: '噜噜打汪', title: '群友', hp: 4, skills: ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'] },
+  { id: 'mogu', name: '蘑菇', title: '菌菇召唤师', hp: 4, skills: ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang'] },
 ];

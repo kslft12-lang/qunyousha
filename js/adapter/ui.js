@@ -25,7 +25,7 @@ QYS.charAvatar = function (ch, cls = '') {
 QYS.ui.create = function (root) {
   const { colorOf, numStr } = QYS.util;
   const ID_NAME = QYS.core.ID_NAME;
-  const TYPE_NAME = { basic: '基本牌', trick: '锦囊牌', delayed: '延迟锦囊', equip: '装备牌' };
+  const TYPE_NAME = { basic: '基本牌', trick: '锦囊牌', delayed: '延迟锦囊', equip: '装备牌', curse: '诅咒牌' };
   const SLOT_NAME = { weapon: '武器', armor: '防具', horsePlus: '+1马', horseMinus: '-1马' };
   const ID_CLS = { 主: 'lord', 忠: 'loyal', 反: 'rebel', 内: 'spy' };
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
@@ -114,6 +114,7 @@ QYS.ui.create = function (root) {
     const ch = charOf(p);
     const locked = g.isLocked ? g.isLocked(p) : !!p.locked;
     const inToilet = g.toilet ? (g.toilet.a === p || g.toilet.b === p) : !!p.toilet;
+    const charmed = !!p.charmFrom || !!p.charmed;
     const laddered = !!p.ladderFail || !!p.ladder;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
@@ -131,7 +132,7 @@ QYS.ui.create = function (root) {
         <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
-        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
+        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${charmed ? '<span class="chip charmChip">魅惑菇</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
         <div class="skRow"><span class="lbl">技能</span>${skChips || '<span class="lbl">无</span>'}</div>
       </div>
       ${hang ? `<div class="hangRow">${hang}</div>` : ''}
@@ -192,11 +193,24 @@ QYS.ui.create = function (root) {
     const n = Math.max(alivePs.length, 1);
     const idx = new Map(alivePs.map((p, i) => [p, i]));
     const anchorIdx = idx.has(anchor) ? idx.get(anchor) : 0;
+    // 椭圆半径按容器实测尺寸自适应（每张武将牌按 CW×CH 占位）：
+    // 保证顶部/左右边缘的武将牌完整显示不被裁切；cy=46% 让视觉重心略偏上，给底部手牌区让位
+    const box = ring.getBoundingClientRect();
+    const CY = 46, CW = 178, CH = 176;
+    let rx = 40, ry = 33;
+    if (box.width > 120 && box.height > 120) {
+      rx = Math.max(30, Math.min(46, (box.width - CW - 16) / (2 * box.width) * 100));
+      ry = Math.max(22, Math.min(44, Math.min(
+        (CY / 100 * box.height - CH / 2 - 8) / box.height,
+        ((100 - CY) / 100 * box.height - CH / 2 - 8) / box.height) * 100));
+    }
     const pos = p => {
       const rel = ((idx.get(p) ?? anchorIdx) - anchorIdx + n) % n;
       const a = (90 - rel * 360 / n) * Math.PI / 180;
-      return { x: 50 + 40 * Math.cos(a), y: 46 + 33 * Math.sin(a) };
+      return { x: 50 + rx * Math.cos(a), y: CY + ry * Math.sin(a) };
     };
+    // 7~8 人局：环上加 crowd 紧凑样式（见 css），缓解拥挤
+    ring.classList.toggle('crowd', g.players.length >= 7);
     ring.innerHTML = alivePs.map(p => playerHtml(p, pos(p))).join('');
     fallenRow.innerHTML = g.players.filter(p => !p.alive)
       .map(p => `<span class="chip fallenChip">${p.name}·${ID_NAME[p.identity] || ''} 阵亡</span>`).join('');
@@ -204,7 +218,7 @@ QYS.ui.create = function (root) {
     const cur = g.players[g.currentIdx];
     const entries = discardEntries(g);
     turnInfo.innerHTML = g.over
-      ? `终局 · ${g.winner || ''}获胜`
+      ? `终局 · ${g.winner === '平局' || !g.winner ? '平局' : g.winner + '获胜'}`
       : `<b>${cur ? cur.name : ''}</b> 的回合${cur && cur.seat === g.humanSeat ? '（你）' : ''} · 牌堆 ${g.deckCount ?? g.deck.length} · 弃牌 ${entries.length}`;
     seal.innerHTML = g.over ? `<div class="seal over">终</div>` : `<div class="seal">${g.phase || '歇'}</div>`;
     promptEl.textContent = view.state?.hint || '';
@@ -375,14 +389,25 @@ QYS.ui.create = function (root) {
     cardDetail.hidden = false;
   });
 
+  // 窗口尺寸变化（含手机旋转）后重算椭圆布局
+  let rsTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(rsTimer);
+    rsTimer = setTimeout(() => { if (view.game) render(); }, 120);
+  });
+
   // ---- 流程弹层 ----
   view.attach = (g, remote = false) => {
     view.game = g;
+    if (!remote) g.view = view;
+    // 联机（remote）状态快照会频繁到达，弃牌堆展开/详情固定不在此重置（换局时由 net 层调 resetPanels）
+    if (!remote) view.resetPanels();
+    gameScreen.hidden = false;
+  };
+  view.resetPanels = () => {
     view.pinnedKey = null;
     view.discExpanded = false;
     cardDetail.hidden = true;
-    if (!remote) g.view = view;
-    gameScreen.hidden = false;
   };
 
   view.showSplash = g => {
@@ -408,7 +433,7 @@ QYS.ui.create = function (root) {
     const rows = g.players.map(p =>
       `<tr><td>${p.name}</td><td>${ID_NAME[p.identity]}</td><td>${p.alive ? '存活' : '阵亡'}</td><td>${p.seat === g.humanSeat ? '你' : ''}</td></tr>`).join('');
     overlay.innerHTML = `<div class="panel">
-      <h1 class="winTitle">${g.winner} 获胜</h1>
+      <h1 class="winTitle">${g.winner === '平局' || !g.winner ? '平局' : g.winner + ' 获胜'}</h1>
       <table class="idTable"><tr><th>武将</th><th>身份</th><th>状态</th><th></th></tr>${rows}</table>
       <button class="btn primary" data-act="restart">再来一局</button>
     </div>`;

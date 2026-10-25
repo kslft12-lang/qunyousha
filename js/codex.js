@@ -3,8 +3,8 @@ globalThis.QYS = globalThis.QYS || {};
 QYS.codex = {};
 
 (function () {
-  const TYPE_NAME = { basic: '基本牌', trick: '锦囊', delayed: '延迟锦囊', equip: '装备' };
-  const TYPE_ORDER = ['basic', 'trick', 'delayed', 'equip'];
+  const TYPE_NAME = { basic: '基本牌', trick: '锦囊', delayed: '延迟锦囊', equip: '装备', curse: '诅咒牌' };
+  const TYPE_ORDER = ['basic', 'trick', 'delayed', 'equip', 'curse'];
   const SLOT_NAME = { weapon: '武器', armor: '防具', horsePlus: '+1马', horseMinus: '-1马' };
 
   let root = null, tab = 'char';

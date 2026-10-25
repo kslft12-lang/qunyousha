@@ -23,9 +23,9 @@ QYS.rules = {};
     }
     if (d.canUse && !d.canUse(game, p)) return { ok: false, targets: [] };
     let cands = d.target?.candidates ? d.target.candidates(game, p) : [];
-    // 隐身：不能被单体锦囊（含乐不思蜀等延迟锦囊）选中为目标
+    // 隐身：不能被单体锦囊（含乐不思蜀等延迟锦囊）选中为目标；对自己使用的锦囊不受影响
     if ((d.type === 'trick' || d.type === 'delayed') && (d.target?.count ?? 0) === 1)
-      cands = cands.filter(t => !game.hasSkill(t, 'sk_yinshen'));
+      cands = cands.filter(t => t === p || !game.hasSkill(t, 'sk_yinshen'));
     const need = d.target?.count ?? 0;
     return { ok: cands.length >= need, targets: cands };
   };
@@ -99,6 +99,12 @@ QYS.rules = {};
 
       const card = act.card;
       if (!p.hand.includes(card)) continue;
+      // 梯子专家：被盯上的角色本回合使用任意卡牌有一半概率失败（出牌阶段走 askPlay，不经 askCard，需在此判定）
+      if (p.ladderFail && Math.random() < 0.5) {
+        game.log(`${p.name} 的${QYS.cardLabel(card)}因【梯子专家】造成的网络波动而使用失败`, 'skill');
+        game.update();
+        continue;
+      }
       const info = QYS.rules.playInfo(game, p, card);
       if (!info.ok) continue;
       let targets = [];
@@ -136,17 +142,21 @@ QYS.rules = {};
   }
 
   async function discardPhase(game, p) {
-    // 小笼包：手牌上限-1（最低 0）
-    const limit = game.hasSkill(p, 'sk_xiaolongbao') ? Math.max(0, p.hp - 1) : p.hp;
+    // 小笼包：手牌上限-1（最低 0）；似乎有些触动：手牌上限+1
+    let limit = game.hasSkill(p, 'sk_xiaolongbao') ? Math.max(0, p.hp - 1) : p.hp;
+    if (game.hasSkill(p, 'sk_chudong')) limit += 1;
     while (!game.over && p.alive && p.hand.length > limit) {
+      // 金针菇诅咒无法弃置：只剩诅咒时只能保留超限
+      const normal = p.hand.filter(c => c.defId !== 'jinzhengu');
+      if (!normal.length) { game.log(`${p.name} 的手牌全是【金针菇】，无法弃置`, 'system'); break; }
       const c = await game.askCard(p, {
-        filter: () => true, tag: '弃牌',
-        hint: `弃牌阶段：请弃置手牌（上限 ${limit}，还需 ${p.hand.length - limit} 张）`, cancelText: '随机弃一张',
+        filter: x => x.defId !== 'jinzhengu', tag: '弃牌',
+        hint: `弃牌阶段：请弃置手牌（上限 ${limit}，还需 ${p.hand.length - limit} 张；【金针菇】无法弃置）`, cancelText: '随机弃一张',
       });
       if (c && p.hand.includes(c)) {
         game.discardFromHand(p, c);
-      } else if (p.hand.length > limit) {
-        const r = p.hand[(Math.random() * p.hand.length) | 0];
+      } else {
+        const r = normal[(Math.random() * normal.length) | 0];
         game.discardFromHand(p, r);
         game.log(`${p.name} 随机弃置了${QYS.cardLabel(r)}`, 'system');
       }
@@ -157,6 +167,7 @@ QYS.rules = {};
   async function turn(game, p) {
     game.turnCount++;
     p.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+    game.tickCurse(p); // 金针菇诅咒：持有者回合开始计数+1，满三个回合自动移出
     game.players.forEach(q => { q.ladderFail = false; }); // 梯子专家标记只在其发动者回合内有效（防发动者中途回合中断导致残留）
     if (game.warLock && game.warLock.a === p) game.warLock = null; // 下一次轮到自己，小学生战争结束（一起上厕所的解除在其技能钩子内）
     game.phase = '回合开始';
@@ -179,6 +190,7 @@ QYS.rules = {};
       game.update();
     }
     game.phase = null;
+    if (p.charmFrom) p.charmFrom = null; // 【魅惑菇】：目标回合结束时解除
   }
 
   QYS.rules.run = async function (game) {

@@ -116,11 +116,14 @@ QYS.core = QYS.core || {};
     game.anyCards = p => p.hand.length > 0 || p.judges.length > 0 || Object.values(p.equips).some(Boolean);
     game.randomZoneCard = p => {
       const zones = [];
-      if (p.hand.length) zones.push({ zone: 'hand' });
+      // 金针菇诅咒无法被弃置/获得（拆桥/顺手等随机指定跳过之）
+      const handPick = p.hand.filter(c => c.defId !== 'jinzhengu');
+      if (handPick.length) zones.push({ zone: 'hand', cards: handPick });
       for (const [slot, c] of Object.entries(p.equips)) if (c) zones.push({ zone: 'equip', slot });
       p.judges.forEach((c, i) => zones.push({ zone: 'judge', index: i }));
+      if (!zones.length) return null; // 区域已空：候选计算之后牌可能在无懈等流程中被消耗
       const z = zones[(Math.random() * zones.length) | 0];
-      if (z.zone === 'hand') return { zone: 'hand', card: p.hand[(Math.random() * p.hand.length) | 0] };
+      if (z.zone === 'hand') return { zone: 'hand', card: z.cards[(Math.random() * z.cards.length) | 0] };
       if (z.zone === 'equip') return { zone: 'equip', slot: z.slot, card: p.equips[z.slot] };
       return { zone: 'judge', index: z.index, card: p.judges[z.index] };
     };
@@ -137,6 +140,28 @@ QYS.core = QYS.core || {};
     game.discardFromHand = (p, card, via = '弃置') => {
       const i = p.hand.indexOf(card);
       if (i >= 0) { p.hand.splice(i, 1); game.toDiscard(card, p, via); }
+    };
+
+    // ---- 金针菇诅咒（蘑菇）：无法使用/弃置，计入上限，经三个自己的回合后移出；移出不进弃牌堆 ----
+    // 持有者回合开始时由 rules.js turn() 调用；返回本次到期移出的张数
+    game.tickCurse = p => {
+      for (const c of p.hand) if (c.defId === 'jinzhengu') c.age = (c.age || 0) + 1;
+      const expired = p.hand.filter(c => c.defId === 'jinzhengu' && c.age >= 3);
+      if (expired.length) {
+        p.hand = p.hand.filter(c => !expired.includes(c));
+        game.log(`${p.name} 的 ${expired.length} 张【金针菇】诅咒到期，移出游戏`, 'skill');
+        game.update();
+      }
+      return expired.length;
+    };
+    // 立即移出该角色手中所有【金针菇】（被一起上厕所选中/阵亡时）
+    game.voidAllCurse = p => {
+      const n = p.hand.filter(c => c.defId === 'jinzhengu');
+      if (!n.length) return 0;
+      p.hand = p.hand.filter(c => c.defId !== 'jinzhengu');
+      game.log(`${p.name} 的 ${n.length} 张【金针菇】被移出游戏`, 'skill');
+      game.update();
+      return n.length;
     };
 
     // ---- 牌堆 ----
@@ -212,7 +237,13 @@ QYS.core = QYS.core || {};
         const asked = QYS.data.cards.find(c => c.name === opts.tag);
         if (asked && asked.id !== 'sha' && asked.id !== 'shan') return null;
       }
-      const card = await p.io.chooseCard(p, opts);
+      // 金针菇诅咒：任何选牌（使用/打出/交给）一律不可选中
+      const inner = opts.filter;
+      const card = await p.io.chooseCard(p, {
+        ...opts,
+        filter: c => c.defId !== 'jinzhengu' && (!inner || inner(c)),
+      });
+      if (card && card.defId === 'jinzhengu') return null; // 双保险（联机客户端不可信）
       // 梯子专家：本回合被盯上的角色使用任意卡牌有一半概率失败（弃牌不受影响）
       if (card && p.ladderFail && opts.tag !== '弃牌' && Math.random() < 0.5) {
         game.log(`${p.name} 的卡牌因【梯子专家】造成的网络波动而使用失败`, 'skill');
@@ -404,6 +435,7 @@ QYS.core = QYS.core || {};
     };
 
     const dropAll = p => {
+      game.voidAllCurse(p); // 金针菇诅咒随阵亡移出游戏，不进弃牌堆
       for (const c of p.hand.splice(0)) game.toDiscard(c, p, '弃置');
       for (const [slot, c] of Object.entries(p.equips)) { if (c) { game.toDiscard(c, p, '弃置'); p.equips[slot] = null; } }
       for (const c of p.judges.splice(0)) game.toDiscard(c, p, '弃置');
@@ -492,6 +524,7 @@ QYS.core = QYS.core || {};
         oranges: p.oranges || 0,
         blade: p.blade || 0,
         toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
+        charmed: !!p.charmFrom,
         ladder: !!p.ladderFail,
         locked: game.isLocked(p),
         handCount: p.hand.length,

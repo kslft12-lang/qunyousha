@@ -34,6 +34,8 @@ QYS.net = {};
     }
     const send = () => ws.send(JSON.stringify(action));
     if (ws && ws.readyState === 1) return send();
+    // 连接建立中：把动作排队到同一条连接，避免重复点击开出第二条 WebSocket（会创建出两个房间）
+    if (ws && ws.readyState === 0) { ws.addEventListener('open', () => send(), { once: true }); return; }
     lobbyMsg('连接中…（需要用 node server.js 启动才能联机）');
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     try { ws = new WebSocket(`${wsProto}//${location.host}`); } catch { return lobbyMsg('无法建立连接'); }
@@ -81,12 +83,13 @@ QYS.net = {};
   }
 
   function onState(snap) {
-    // 换局识别：gameId 变化 = 新一局开始（重置弹层状态）
+    // 换局识别：gameId 变化 = 新一局开始（重置弹层状态与面板）
     if (snap.gameId !== undefined && snap.gameId !== lastGameId) {
       lastGameId = snap.gameId;
       overShown = false;
       splashDone = false;
       view.game = null;
+      if (view.resetPanels) view.resetPanels();
     }
     const first = !view.game;
     view.attach(snap, true);
@@ -116,7 +119,7 @@ QYS.net = {};
     let p;
     try {
       if (msg.method === 'chooseCard')
-        p = view.io.chooseCard(null, { filter: filterFromTag(args.tag), hint: args.hint || '', cancelText: args.cancelText });
+        p = view.io.chooseCard(null, { filter: filterFrom(args), hint: args.hint || '', cancelText: args.cancelText });
       else if (msg.method === 'chooseBool')
         p = view.io.chooseBool(null, { hint: args.hint || '', cancelText: args.cancelText });
       else if (msg.method === 'chooseTargets')
@@ -141,7 +144,16 @@ QYS.net = {};
     drain();
   }
 
-  // tag 即卡牌名（杀/闪/桃），弃牌/技能为任意牌
+  // 选牌过滤：优先用服务器按引擎 filter 算出的可选牌键（okKeys，与本地单机完全一致）；
+  // 旧服务器无 okKeys 时按 tag（卡牌名）回退，弃牌/技能为任意牌
+  function filterFrom(args) {
+    if (Array.isArray(args.okKeys)) {
+      const ok = new Set(args.okKeys);
+      return c => ok.has(`${c.defId}|${c.suit}|${c.number}`);
+    }
+    return filterFromTag(args.tag);
+  }
+
   function filterFromTag(tag) {
     if (!tag || tag === '弃牌' || tag === '技能') return () => true;
     return c => { try { return QYS.def(c).name === tag; } catch { return false; } };

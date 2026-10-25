@@ -123,10 +123,12 @@ function mapCard(p, v) {
 
 // 远端玩家的问答适配器：把引擎提问转发给浏览器，等待点击回答。
 // 所有应答在服务端按引擎给定的 filter/candidates 校验——客户端不可信。
+// 掉线（room.disconnected）期间由机器人代打，与 README 约定一致；重连前一直代打。
 function netIoFor(room, conn, seat) {
   const mySeq = room.gameSeq; // 换局守卫：此提问属于的局编号（gameSeq 在 createGame 前已递增）
+  const bot = QYS.bot.io();
   const ask = (method, args) => new Promise(resolve => {
-    if (room.disconnected.has(seat) || room.gameSeq !== mySeq) return resolve(null);
+    if (room.gameSeq !== mySeq) return resolve(defaultAnswer(method, args));
     const id = 'a' + (++room.askSeq);
     const timer = setTimeout(() => {
       if (conn.pending[id]) {
@@ -136,11 +138,16 @@ function netIoFor(room, conn, seat) {
       }
     }, 90000);
     conn.pending[id] = v => { clearTimeout(timer); resolve(v); };
+    if (process.env.SMOKE_VERBOSE) console.log(`[${room.code}] ask #${id} ${method} → 座位 ${seat + 1}`);
     conn.send({ t: 'ask', id, method, args });
   });
   return {
     async chooseCard(p, opts = {}) {
-      const v = await ask('chooseCard', { tag: opts.tag || '', hint: opts.hint || '', cancelText: opts.cancelText });
+      if (room.disconnected.has(seat)) return bot.chooseCard(p, opts);
+      // 把引擎 filter 的结果（可选手牌键）下发给客户端，保证其可选集与单机一致
+      const okKeys = (opts.filter ? p.hand.filter(opts.filter) : [...p.hand])
+        .map(c => `${c.defId}|${c.suit}|${c.number}`);
+      const v = await ask('chooseCard', { tag: opts.tag || '', hint: opts.hint || '', cancelText: opts.cancelText, okKeys });
       const card = mapCard(p, v);
       // 服务端执行引擎的 filter（防客户端发来不合法的牌，如把无懈当闪）
       if (card && opts.filter && !opts.filter(card)) {
@@ -149,8 +156,12 @@ function netIoFor(room, conn, seat) {
       }
       return card;
     },
-    async chooseBool(p, opts = {}) { return !!(await ask('chooseBool', { hint: opts.hint || '', cancelText: opts.cancelText })); },
+    async chooseBool(p, opts = {}) {
+      if (room.disconnected.has(seat)) return bot.chooseBool(p, opts);
+      return !!(await ask('chooseBool', { hint: opts.hint || '', cancelText: opts.cancelText }));
+    },
     async chooseTargets(p, opts = {}) {
+      if (room.disconnected.has(seat)) return bot.chooseTargets(p, opts);
       const v = await ask('chooseTargets', {
         candidateSeats: (opts.candidates || []).map(c => c.seat),
         min: opts.min, max: opts.max, hint: opts.hint || '',
@@ -163,6 +174,7 @@ function netIoFor(room, conn, seat) {
       return players.length ? players : null;
     },
     async askPlay(p, opts = {}) {
+      if (room.disconnected.has(seat)) return bot.askPlay(p, opts);
       const v = await ask('askPlay', {
         playable: (opts.playable || []).map(it => ({ card: it.card })),
         canSkill: opts.canSkill, skillName: opts.skillName, hint: opts.hint || '',
@@ -220,7 +232,12 @@ function startGame(room, playerCount) {
 
 // 加入房间：对局中后加入为观战（座位号 >= playerCount）
 function joinRoom(conn, room, name) {
-  const seat = room.nextSeat++;
+  let seat = room.nextSeat++;
+  // 对局进行中不许占到玩家座位：快照按座位裁剪隐私，坐进玩家位会看到该座位的手牌与暗置身份
+  if (room.game && !room.game.over && seat < room.playerCount) {
+    seat = room.playerCount;
+    room.nextSeat = seat + 1;
+  }
   conn.room = room.code;
   conn.name = name;
   conn.pending = {};
@@ -278,11 +295,18 @@ function onConnection(conn) {
   conn.buf = Buffer.alloc(0);
   conn.alive = true;
   conn.send = obj => { if (conn.alive) wsSend(conn.socket, JSON.stringify(obj)); };
-  conn.socket.on('data', d => { conn.buf = Buffer.concat([conn.buf, d]); parseFrames(conn, onMessage); });
+  conn.socket.on('data', d => {
+    conn.buf = Buffer.concat([conn.buf, d]);
+    try { parseFrames(conn, onMessage); } catch (e) { console.error('消息处理异常：', e); }
+  });
   const cleanup = () => {
     if (conn.alive === false && conn.socket.destroyed) return;
     conn.alive = false;
     const room = roomOf(conn);
+    // 先把未应答的询问立即按放弃结算，避免整局卡到 90 秒超时（掉线座位此后由机器人代打）
+    const pending = conn.pending || {};
+    conn.pending = {};
+    for (const k of Object.keys(pending)) pending[k](null);
     if (!room) return;
     const seat = room.conns.get(conn);
     room.conns.delete(conn);
@@ -310,6 +334,7 @@ function onConnection(conn) {
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
 };
 const server = http.createServer((req, res) => {
