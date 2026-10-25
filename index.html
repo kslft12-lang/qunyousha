@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>群友杀</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="startScreen">
+    <h1>群友<span class="sealDot">杀</span></h1>
+    <p class="sub">以群友为武将的三国杀式牌局 · 框架演示版</p>
+    <label class="field">玩家数量
+      <select id="playerCount">
+        <option>2</option><option>3</option><option>4</option>
+        <option selected>5</option>
+        <option>6</option><option>7</option><option>8</option>
+      </select>
+    </label>
+    <label class="field">昵称 <input id="nickName" maxlength="8" placeholder="联机时显示"></label>
+    <div class="btns">
+      <button id="btnStart" class="btn primary">开始游戏</button>
+      <button id="btnDemo" class="btn">全机器人演示</button>
+      <button id="btnOnline" class="btn">联机</button>
+      <button id="btnCodex" class="btn">图鉴</button>
+    </div>
+    <p class="tip">当前武将 / 卡牌 / 图片均为占位内容 · 替换方法见 README.md</p>
+  </div>
+  <div id="lobby" hidden>
+    <h2>联机大厅</h2>
+    <div id="lobbySeats"></div>
+    <div id="lobbyOpts" hidden>
+      <label class="field">玩家数量
+        <select id="onlineCount">
+          <option>2</option><option>3</option><option>4</option>
+          <option selected>5</option>
+          <option>6</option><option>7</option><option>8</option>
+        </select>
+      </label>
+      <button id="btnOnlineStart" class="btn primary">开始联机对局</button>
+    </div>
+    <p id="lobbyMsg" class="tip">未坐满的座位由机器人代打</p>
+    <button id="btnLobbyBack" class="btn">返回</button>
+  </div>
+  <div id="gameRoot"></div>
+</div>
+
+<script src="js/data/characters.js"></script>
+<script src="js/data/cards.js"></script>
+<script src="js/engine/core.js"></script>
+<script src="js/engine/rules.js"></script>
+<script src="js/adapter/bot.js"></script>
+<script src="js/adapter/ui.js"></script>
+<script src="js/codex.js"></script>
+<script src="js/net.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
