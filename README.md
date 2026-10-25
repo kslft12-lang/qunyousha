@@ -18,12 +18,19 @@
 
 能力边界：GitHub Pages 只能托管静态页面，**单机 / 全机器人演示 / 图鉴可用；「联机」不可用**（页面上点联机会有明确提示）——因为联机需要一个常驻的 WebSocket 服务器，GitHub 不提供后端运行环境。
 
-**自建联机服务器**
+**云托管联机（Render，免费档即可）**
+
+1. 打开 https://render.com → `Sign in with GitHub`（授权访问 qunyousha 仓库）
+2. 控制台 `New +` → `Web Service` → 选中本仓库
+3. 配置页：Region 随意，Instance Type 选 `Free`，Start Command 留空（自动用 package.json 的 `npm start`）→ `Create Web Service`
+4. 构建日志跑完后，页面顶部会给固定公网网址（形如 `https://qunyousha-xxxx.onrender.com`），发到群里即可联机
+
+免费档注意：15 分钟无人访问会休眠，下次打开要等 30~60 秒唤醒；想保持常驻可用 cron-job.org 之类每 10 分钟 ping 一次首页。国内直连 onrender.com 的速度因地区而异，若群友访问慢，可套自定义域名或退回隧道方案。
+
+**局域网 / 隧道（备选）**
 
 - 局域网：任选一台电脑 `node server.js 8123`，群友访问 `http://<该机IP>:8123`
-- 公网二选一：
-  - 内网穿透：如 cloudflared 快速隧道（无需账号；历史提交 `2bf9911` 里有一键脚本，可用 `git show 2bf9911:start-online.bat` 找回）
-  - Node 托管平台：推到 Render / Railway / Zeabur 等，启动命令 `node server.js`，平台分配公网域名
+- 公网内网穿透：cloudflared 快速隧道（无需账号；历史提交 `2bf9911` 里有一键脚本，可用 `git show 2bf9911:start-online.bat` 找回）
 - 注意：服务器是"单房间、无鉴权"的框架实现，知道地址即可进入（对局开始后加入为观战）
 
 ## 玩法

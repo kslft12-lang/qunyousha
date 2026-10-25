@@ -1,0 +1,14 @@
+{
+  "name": "qunyousha",
+  "version": "0.1.0",
+  "private": true,
+  "description": "以群友为武将的三国杀式网页牌局（单机 + 联机）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
