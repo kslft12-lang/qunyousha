@@ -11,14 +11,16 @@ QYS.ui.create = function (root) {
   const ID_CLS = { 主: 'lord', 忠: 'loyal', 反: 'rebel', 内: 'spy' };
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
 
-  const view = { game: null, state: null, splashResolve: null };
+  const view = { game: null, state: null, splashResolve: null, pinnedKey: null };
 
   root.innerHTML = `
     <div id="gameScreen" hidden>
       <div id="tableArea">
+        <div id="idStats"></div>
         <div id="seal"></div>
         <div id="ring"></div>
         <div id="centerBar"><div id="turnInfo"></div><div id="prompt"></div></div>
+        <div id="discardCorner"></div>
         <div id="selfArea"></div>
       </div>
       <div id="logPanel"><div class="logTitle">战 报</div><div id="logList"></div></div>
@@ -29,7 +31,8 @@ QYS.ui.create = function (root) {
 
   const $ = s => root.querySelector(s);
   const gameScreen = $('#gameScreen'), ring = $('#ring'), seal = $('#seal'),
-    turnInfo = $('#turnInfo'), promptEl = $('#prompt'),
+    turnInfo = $('#turnInfo'), promptEl = $('#prompt'), idStats = $('#idStats'),
+    discardCorner = $('#discardCorner'),
     selfArea = $('#selfArea'), logList = $('#logList'), actionBar = $('#actionBar'),
     cardDetail = $('#cardDetail'), overlay = $('#overlay');
 
@@ -85,18 +88,15 @@ QYS.ui.create = function (root) {
     const skChips = (p.skillIds || []).map(id => ({ id, s: QYS.data.skills[id] })).filter(x => x.s)
       .map(x => `<span class="chip skChip" data-skill="${x.id}">${x.s.name}</span>`).join('');
     const hang = hangFaces(p);
-    // 个人弃牌堆：右下角按钮，点击展开查看该玩家打出/弃置过的牌
-    const mine = discardEntries(g).filter(e => e.seat === p.seat);
-    const popAbove = !!ringPos && ringPos.y > 60;
-    const pop = view.discOpen === p.seat && mine.length
-      ? `<div class="discPop${popAbove ? ' up' : ''}">${mine.map(e => faceHtml(e.card, `data-by="${e.by}" data-via="${e.via}"`, 'disc')).join('')}</div>`
-      : '';
+    // 编号 = 从主公（1号）起按行动顺序
+    const n = g.players.length;
+    const num = ((p.seat - (g.lordSeat ?? 0)) % n + n) % n + 1;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
       ${avatarHtml(p)}
       <div class="pinfo">
-        <div class="pname">${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
+        <div class="pname"><span class="pnum">${num}号</span>${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
         <div class="ptitle">${p.title}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
@@ -104,7 +104,6 @@ QYS.ui.create = function (root) {
         <div class="skRow"><span class="lbl">技能</span>${skChips || '<span class="lbl">无</span>'}</div>
       </div>
       ${hang ? `<div class="hangRow">${hang}</div>` : ''}
-      ${mine.length ? `<button class="discBtn" data-discseat="${p.seat}">弃 ${mine.length}</button>` : ''}${pop}
     </div>`;
   }
 
@@ -160,15 +159,19 @@ QYS.ui.create = function (root) {
 
     const cur = g.players[g.currentIdx];
     const entries = discardEntries(g);
-    const top = entries[0]?.card;
-    const topHtml = top
-      ? ` · 弃牌顶 <span class="discardTop ${colorOf(top.suit) === 'red' ? 'redSuit' : 'blackSuit'}">${dn(top)} ${numStr(top.number)}${top.suit}</span>`
-      : '';
     turnInfo.innerHTML = g.over
       ? `终局 · ${g.winner || ''}获胜`
-      : `<b>${cur ? cur.name : ''}</b> 的回合${cur && cur.seat === g.humanSeat ? '（你）' : ''} · 牌堆 ${g.deckCount ?? g.deck.length} · 弃牌 ${entries.length}${topHtml}`;
+      : `<b>${cur ? cur.name : ''}</b> 的回合${cur && cur.seat === g.humanSeat ? '（你）' : ''} · 牌堆 ${g.deckCount ?? g.deck.length} · 弃牌 ${entries.length}`;
     seal.innerHTML = g.over ? `<div class="seal over">终</div>` : `<div class="seal">${g.phase || '歇'}</div>`;
     promptEl.textContent = view.state?.hint || '';
+
+    // 右上角：本局身份配置（人人可知的公共信息）
+    const ic = g.identityCounts;
+    idStats.innerHTML = !g.over && ic
+      ? ['忠', '反', '内'].map(k => `<span class="chip statChip">${QYS.core.ID_NAME[k]}×${ic[k] || 0}</span>`).join('')
+      : '';
+    // 右下角：统一弃牌堆——所有人的使用/弃置记录，点卡固定查看详情
+    discardCorner.innerHTML = `<div class="dcTitle">弃牌堆 ${entries.length}</div><div class="dcRow">${entries.map(e => faceHtml(e.card, `data-by="${e.by}" data-via="${e.via}"`, 'disc')).join('') || '<span class="dcEmpty">暂无弃牌</span>'}</div>`;
 
     const me = g.humanSeat != null ? g.players[g.humanSeat] : null;
     if (me) {
@@ -271,48 +274,64 @@ QYS.ui.create = function (root) {
   root.addEventListener('click', e => {
     const actBtn = e.target.closest('[data-act]');
     if (actBtn) { handleAction(actBtn.dataset.act); return; }
-    const discBtn = e.target.closest('[data-discseat]');
-    if (discBtn) {
-      view.discOpen = view.discOpen === +discBtn.dataset.discseat ? null : +discBtn.dataset.discseat;
-      render();
+    // 弃牌堆卡牌：点击固定详情（再点同一张取消），点其他位置取消固定
+    const discCard = e.target.closest('#discardCorner [data-defid]');
+    if (discCard) {
+      const key = detailKey(discCard);
+      if (view.pinnedKey === key) {
+        view.pinnedKey = null;
+        cardDetail.hidden = true;
+      } else {
+        view.pinnedKey = key;
+        const html = detailHtml(discCard);
+        if (html) { cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>'; cardDetail.hidden = false; }
+      }
       return;
     }
+    if (view.pinnedKey) { view.pinnedKey = null; cardDetail.hidden = true; }
     const cardEl = e.target.closest('[data-card-idx]');
     if (cardEl) { handleCardClick(+cardEl.dataset.cardIdx); return; }
     const plEl = e.target.closest('.player[data-seat]');
     if (plEl) { handleSeatClick(+plEl.dataset.seat); return; }
   });
 
-  // 悬浮详情：卡牌（手牌/弃牌/悬挂牌）与技能通用，内容来自 data-* 属性
-  root.addEventListener('mouseover', e => {
-    const el = e.target.closest('[data-defid],[data-skill]');
-    if (!el) { cardDetail.hidden = true; return; }
+  // 悬浮/点击详情：卡牌（手牌/弃牌/悬挂牌）与技能通用，内容来自 data-* 属性
+  function detailHtml(el) {
     if (el.dataset.skill) {
       const s = QYS.data.skills[el.dataset.skill];
-      if (!s) { cardDetail.hidden = true; return; }
-      cardDetail.innerHTML = `
-        <div class="dTitle skillTitle">${s.name}</div>
+      if (!s) return null;
+      return `<div class="dTitle skillTitle">${s.name}</div>
         <div class="dType">${s.type === 'active' ? '主动技' : '触发技'}</div>
         <div class="dDesc">${s.desc || ''}</div>`;
-    } else {
-      const d = QYS.data.cards.find(c => c.id === el.dataset.defid);
-      if (!d) { cardDetail.hidden = true; return; }
-      const suit = el.dataset.suit || '';
-      const red = suit && colorOf(suit) === 'red';
-      const by = el.dataset.by ? `<div class="dBy">${el.dataset.by}${el.dataset.via ? ' · ' + el.dataset.via : ''}</div>` : '';
-      cardDetail.innerHTML = `
-        <img src="assets/cards/${d.id}.png" alt="" onerror="this.remove()">
-        <div class="dTitle ${red ? 'redSuit' : 'blackSuit'}">${d.name} ${suit ? `<small>${numStr(+el.dataset.num)}${suit}</small>` : ''}</div>
-        <div class="dType">${TYPE_NAME[d.type]}${d.slot ? ' · ' + SLOT_NAME[d.slot] : ''}</div>
-        ${by}
-        <div class="dDesc">${d.desc || ''}</div>`;
     }
+    const d = QYS.data.cards.find(c => c.id === el.dataset.defid);
+    if (!d) return null;
+    const suit = el.dataset.suit || '';
+    const red = suit && colorOf(suit) === 'red';
+    const by = el.dataset.by ? `<div class="dBy">${el.dataset.by}${el.dataset.via ? ' · ' + el.dataset.via : ''}</div>` : '';
+    return `<img src="assets/cards/${d.id}.png" alt="" onerror="this.remove()">
+      <div class="dTitle ${red ? 'redSuit' : 'blackSuit'}">${d.name} ${suit ? `<small>${numStr(+el.dataset.num)}${suit}</small>` : ''}</div>
+      <div class="dType">${TYPE_NAME[d.type]}${d.slot ? ' · ' + SLOT_NAME[d.slot] : ''}</div>
+      ${by}
+      <div class="dDesc">${d.desc || ''}</div>`;
+  }
+  const detailKey = el => [el.dataset.defid, el.dataset.suit, el.dataset.num, el.dataset.by, el.dataset.via, el.dataset.skill].join('|');
+
+  root.addEventListener('mouseover', e => {
+    if (view.pinnedKey) return; // 已固定详情时忽略悬浮
+    const el = e.target.closest('[data-defid],[data-skill]');
+    if (!el) { cardDetail.hidden = true; return; }
+    const html = detailHtml(el);
+    if (!html) { cardDetail.hidden = true; return; }
+    cardDetail.innerHTML = html;
     cardDetail.hidden = false;
   });
 
   // ---- 流程弹层 ----
   view.attach = (g, remote = false) => {
     view.game = g;
+    view.pinnedKey = null;
+    cardDetail.hidden = true;
     if (!remote) g.view = view;
     gameScreen.hidden = false;
   };

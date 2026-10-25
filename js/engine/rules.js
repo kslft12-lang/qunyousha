@@ -166,7 +166,7 @@ QYS.rules = {};
   }
 
   QYS.rules.run = async function (game) {
-    game.currentIdx = game.humanSeat ?? 0;
+    game.currentIdx = game.lordSeat ?? game.humanSeat ?? 0; // 行动顺序从主公（1号）开始
     game.log('游戏开始，身份分配完毕', 'system');
     game.update();
     while (!game.over) {

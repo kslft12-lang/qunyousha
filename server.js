@@ -77,6 +77,7 @@ function newRoom() {
     playerCount: 5,
     started: false,
     disconnected: new Set(), // 掉线座位，其提问按机器人默认作答
+    rush: new Set(),         // 抢主公的座位（每次开局后清空）
     game: null,
     askSeq: 0,
   };
@@ -99,6 +100,7 @@ function broadcastLobby(room) {
   for (const conn of room.conns.keys())
     conn.send({
       t: 'lobby', code: room.code, seats: seatNames(room), hostSeat: room.hostSeat,
+      rushSeats: [...room.rush],
       started: !!(room.game && !room.game.over),
     });
 }
@@ -169,12 +171,20 @@ function startGame(room, playerCount) {
   room.started = true;
   room.playerCount = playerCount;
   room.disconnected.clear();
+  // 抢主公结算：抢者中随机定主公；没人抢则全员随机
+  const live = new Set(room.conns.values());
+  const rushSeats = [...room.rush].filter(s => s < playerCount && live.has(s));
+  const lordSeat = rushSeats.length
+    ? rushSeats[(Math.random() * rushSeats.length) | 0]
+    : (Math.random() * playerCount) | 0;
+  room.rush.clear();
   const seatConn = [];
   let humans = 0;
   for (const [conn, seat] of room.conns) if (seat < playerCount) { seatConn[seat] = conn; humans++; }
   room.game = QYS.core.createGame({
     playerCount,
     humanSeat: null,
+    lordSeat,
     ioFor: p => (seatConn[p.seat] && !room.disconnected.has(p.seat)) ? netIoFor(room, seatConn[p.seat], p.seat) : QYS.bot.io(),
   });
   room.game.view = { render: () => broadcastStates(room) };
@@ -226,6 +236,14 @@ function onMessage(conn, str) {
     if (room.conns.get(conn) !== room.hostSeat) return;
     if (room.game && !room.game.over) return;
     startGame(room, Math.max(2, Math.min(8, Number(msg.playerCount) || 5)));
+  } else if (msg.t === 'rush') {
+    const room = roomOf(conn);
+    if (!room) return;
+    if (room.game && !room.game.over) return; // 对局进行中不改抢主公
+    const seat = room.conns.get(conn);
+    if (seat == null) return;
+    if (msg.on) room.rush.add(seat); else room.rush.delete(seat);
+    broadcastLobby(room);
   } else if (msg.t === 'answer') {
     const pend = conn.pending && conn.pending[msg.id];
     if (pend) { delete conn.pending[msg.id]; pend(msg.value === undefined ? null : msg.value); }

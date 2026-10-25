@@ -64,15 +64,19 @@ QYS.net = {};
   function renderLobby(msg) {
     if (msg.started && !view.game) { hide('lobby'); return; } // 对局进行中才加入的观战者，直接看牌局
     document.getElementById('lobbyCodeText').textContent = msg.code;
+    const rushSeats = msg.rushSeats || [];
     const seats = document.getElementById('lobbySeats');
     seats.innerHTML = msg.seats.map((n, i) => {
       const tag = i === msg.hostSeat ? '（房主）' : '';
-      return `<div class="lobbySeat${i === mySeat ? ' me' : ''}"><span class="avatar lobbyAv" data-initial="${(n || '机')[0]}"></span>座位 ${i + 1} · ${n || '机器人'}${tag}</div>`;
+      const rush = rushSeats.includes(i) ? '<span class="chip rushChip">抢主公</span>' : '';
+      const toggle = i === mySeat && !msg.started
+        ? `<label class="rushToggle"><input type="checkbox" data-rush ${rushSeats.includes(i) ? 'checked' : ''}>抢主公</label>` : '';
+      return `<div class="lobbySeat${i === mySeat ? ' me' : ''}"><span class="avatar lobbyAv" data-initial="${(n || '机')[0]}"></span>座位 ${i + 1} · ${n || '机器人'}${tag}${rush}${toggle}</div>`;
     }).join('');
     document.getElementById('lobbyOpts').hidden = !(mySeat === msg.hostSeat && !msg.started);
     lobbyMsg(mySeat === msg.hostSeat && !msg.started
-      ? '你是房主：人齐后点「开始联机对局」，把房间码发给朋友'
-      : '等待房主开局…');
+      ? '你是房主：勾选「抢主公」后点「开始联机对局」，抢者中随机定主公'
+      : '等待房主开局…可勾选「抢主公」参与争夺');
   }
 
   function onState(snap) {
@@ -148,6 +152,10 @@ QYS.net = {};
       const code = document.getElementById('roomCode').value.trim();
       if (code.length !== 4) return lobbyMsg('请输入 4 位房间码');
       ensureWs({ t: 'join', name: document.getElementById('nickName').value, code });
+    });
+    document.getElementById('lobbySeats')?.addEventListener('change', e => {
+      if (e.target.matches('[data-rush]') && ws && ws.readyState === 1)
+        ws.send(JSON.stringify({ t: 'rush', on: e.target.checked }));
     });
     document.getElementById('btnOnlineStart')?.addEventListener('click', () => {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'start', playerCount: +document.getElementById('onlineCount').value }));

@@ -5,9 +5,20 @@
   let game = null;
 
   function start(playerCount, humanSeat) {
+    // 抢主公结算：人类勾选则参与，机器人各 50% 概率参抢；抢者随机定主公，无人抢则随机
+    let lordSeat;
+    if (humanSeat != null && $('#rushLord').checked) {
+      const rushers = [humanSeat];
+      for (let s = 0; s < playerCount; s++)
+        if (s !== humanSeat && Math.random() < 0.5) rushers.push(s);
+      lordSeat = rushers[(Math.random() * rushers.length) | 0];
+    } else {
+      lordSeat = (Math.random() * playerCount) | 0;
+    }
     game = QYS.core.createGame({
       playerCount,
       humanSeat,
+      lordSeat,
       ioFor: p => (p.seat === humanSeat ? view.io : QYS.bot.io()),
     });
     view.attach(game);

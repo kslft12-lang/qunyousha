@@ -36,15 +36,22 @@ QYS.core = QYS.core || {};
     return shuffle(deck);
   }
 
-  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, ioFor } = {}) {
+  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, lordSeat = 0, ioFor } = {}) {
     const game = {};
-    // 0 号位固定主公，其余身份洗乱（TODO(规则): 原版为随机决定主公座位）
+    // 主公坐 lordSeat（抢主公的结算结果），其余身份随机分配
+    lordSeat = ((lordSeat % playerCount) + playerCount) % playerCount;
     const ids = [...ID_TABLE[playerCount]];
-    const rest = shuffle(ids.slice(1));
-    ids.splice(1, rest.length, ...rest);
+    const lordId = ids.splice(ids.indexOf('主'), 1)[0];
+    const rest = shuffle(ids);
+    const finalIds = Array.from({ length: playerCount }, (_, i) => (i === lordSeat ? lordId : null));
+    let k = 0;
+    for (let i = 0; i < playerCount; i++) if (finalIds[i] === null) finalIds[i] = rest[k++];
+    game.lordSeat = lordSeat;
+    game.identityCounts = { 主: 0, 忠: 0, 反: 0, 内: 0 };
+    finalIds.forEach(id => { game.identityCounts[id]++; });
     const chars = shuffle([...QYS.data.characters]);
 
-    game.players = ids.map((identity, seat) => {
+    game.players = finalIds.map((identity, seat) => {
       const ch = chars[seat % chars.length];
       const maxHp = ch.hp + (identity === '主' && playerCount > 2 ? 1 : 0);
       const p = {
@@ -323,6 +330,8 @@ QYS.core = QYS.core || {};
   QYS.core.snapshot = function (game, seat) {
     return {
       humanSeat: seat,
+      lordSeat: game.lordSeat,
+      identityCounts: { ...game.identityCounts },
       over: game.over, winner: game.winner, phase: game.phase,
       currentIdx: game.currentIdx, turnCount: game.turnCount,
       deckCount: game.deck.length,
