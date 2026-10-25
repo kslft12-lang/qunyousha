@@ -11,6 +11,9 @@ QYS.rules = {};
     // 小学生战争：被锁玩家只能使用【杀】（闪本身不可主动使用）
     if (game.isLocked(p) && d.id !== 'sha') return { ok: false, targets: [] };
     if (d.noPlay) return { ok: false, targets: [] };
+    // 无膝盖之人：无法装备坐骑
+    if (d.type === 'equip' && (d.slot === 'horsePlus' || d.slot === 'horseMinus') && game.hasSkill(p, 'sk_wuxigai'))
+      return { ok: false, targets: [] };
     if (d.type === 'equip') return { ok: true, targets: [] };
     if (d.type === 'delayed') {
       if (d.id === 'shandian') return { ok: true, targets: [] }; // 闪电放在自己判定区

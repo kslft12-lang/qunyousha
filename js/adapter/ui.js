@@ -117,11 +117,15 @@ QYS.ui.create = function (root) {
     const laddered = !!p.ladderFail || !!p.ladder;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
-    // orange 计数（秋秋人）：头像下方橙色徽标
+    // orange 计数（秋秋人）：头像下方橙色徽标；太刀（花生酱酱酱）：头像右上角刃色图标
     const showOrg = (p.skillIds || []).includes('sk_orange');
     const orgBadge = showOrg ? `<span class="orgBadge" title="orange：出牌阶段可使用，1个回复1点体力">${p.oranges ?? 0}</span>` : '';
+    const BLADE_NAME = ['', '攻击范围+1', '每回合两张杀', '杀伤害+1'];
+    const bladeLv = p.blade ?? 0;
+    const bladeIcon = bladeLv > 0 && (p.skillIds || []).includes('sk_taidao')
+      ? `<span class="bladeIcon b${bladeLv}" title="太刀·${['', '白刃', '黄刃', '红刃'][bladeLv]}：${BLADE_NAME[bladeLv]}">刀</span>` : '';
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
-      <div class="avWrap">${avatarHtml(p)}${orgBadge}</div>
+      <div class="avWrap">${avatarHtml(p)}${orgBadge}${bladeIcon}</div>
       <div class="pinfo">
         <div class="pname"><span class="pnum">${num}号</span>${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
         <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>

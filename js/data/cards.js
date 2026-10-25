@@ -39,15 +39,23 @@ QYS.data.cards = [
       // 狼牙棒（主公技）：诸葛连弩对其无效
       const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
       if (w && w.unlimitedSha && !langyaLord) return true;
-      return u.turn.shaUsed < (g.hasSkill(u, 'sk_guantangbao') ? 2 : 1);
+      // 每回合杀上限：灌汤包 2 张；太刀黄刃（等级≥2）2 张
+      const limit = Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
+      return u.turn.shaUsed < limit;
     },
     async effect(g, { user, targets }) {
       const tgt = targets[0];
+      // 太刀高手：每使用一次杀永久升级（无→白刃→黄刃→红刃，升级当次即生效）
+      if (g.hasSkill(user, 'sk_taidao') && user.blade < 3) {
+        user.blade++;
+        g.log(`【太刀高手】${user.name} 的太刀升至 ${['无', '白刃（攻击范围+1）', '黄刃（每回合两张杀）', '红刃（杀伤害+1）'][user.blade]}`, 'skill');
+      }
       // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸
       const guantang = g.hasSkill(user, 'sk_guantangbao') && tgt.hp === 1;
-      // 狼牙棒（主公技）：杀伤害+1
+      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1
       const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
-      const bonus = (user.turn.wine ? 1 : 0) + langya;
+      const bladeDmg = g.hasSkill(user, 'sk_taidao') && user.blade >= 3 ? 1 : 0;
+      const bonus = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
       user.turn.wine = false;
       user.turn.shaUsed++;
       const hit = await g.shaResolve(user, tgt, bonus);

@@ -220,5 +220,44 @@ async function play(n) {
       if (fail < 30 || fail > 70) throw new Error('梯子用牌失败比例异常: ' + fail + '/100');
       console.log('噜噜打汪检查 ✓（狼牙棒范围/伤害/连弩无效、新疆网络' + miss + '%失效、梯子专家交牌/失败' + fail + '%）');
     }
+
+    // 无膝盖之人 + 太刀高手检查：禁骑坐骑、升级链（范围/两杀/伤害）、杀敌掉级
+    {
+      const io9 = () => ({ async chooseCard() { return null; }, async chooseBool() { return false; }, async chooseTargets() { return null; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
+      const g9 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['花', '甲', '乙', '丙', '丁'], ioFor: io9 });
+      const hua = g9.players[0], far = g9.players[2];
+      hua.skillIds = ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'];
+      // 无膝盖：坐骑不可装备，武器/防具正常
+      if (QYS.rules.playInfo(g9, hua, { defId: 'ma_atk', suit: '♣', number: 9 }).ok) throw new Error('-1马应不可装备');
+      if (!QYS.rules.playInfo(g9, hua, { defId: 'liannu', suit: '♦', number: 1 }).ok) throw new Error('武器应可装备');
+      // 太刀升级链
+      const shaDef3 = QYS.data.cards.find(c => c.id === 'sha');
+      hua.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+      far.hand.length = 0;
+      if (hua.blade !== 0) throw new Error('太刀初始应为无');
+      // 第1杀：升至白刃，范围+1 覆盖距离2（此次伤害仍1点）
+      await shaDef3.effect(g9, { user: hua, targets: [far], card: { defId: 'sha', suit: '♠', number: 4 } });
+      if (hua.blade !== 1) throw new Error('第1杀后应为白刃');
+      if (!g9.inShaRange(hua, far)) throw new Error('白刃攻击范围应+1');
+      // 第2杀：升至黄刃 → 每回合两杀
+      far.hp = 4;
+      hua.turn.shaUsed = 0;
+      await shaDef3.effect(g9, { user: hua, targets: [far], card: { defId: 'sha', suit: '♠', number: 5 } });
+      if (hua.blade !== 2) throw new Error('第2杀后应为黄刃');
+      hua.turn.shaUsed = 1;
+      if (!shaDef3.canUse(g9, hua)) throw new Error('黄刃应允许第二张杀');
+      // 第3杀：升至红刃 → 伤害+1（升级当次生效）
+      far.hp = 4;
+      hua.turn.shaUsed = 0;
+      await shaDef3.effect(g9, { user: hua, targets: [far], card: { defId: 'sha', suit: '♠', number: 6 } });
+      if (hua.blade !== 3) throw new Error('第3杀后应为红刃');
+      if (far.hp !== 2) throw new Error('红刃杀应造成2点伤害，实际剩 ' + far.hp);
+      // 以杀杀死 → 掉一级（红刃3→2）
+      far.hp = 1; far.identity = '忠';
+      hua.turn.shaUsed = 0;
+      await shaDef3.effect(g9, { user: hua, targets: [far], card: { defId: 'sha', suit: '♠', number: 7 } });
+      if (!(!far.alive && hua.blade === 2)) throw new Error('杀敌应跌落一级，当前 ' + hua.blade);
+      console.log('无膝盖/太刀高手检查 ✓（禁坐骑/升级链/红刃2伤/杀敌掉级）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

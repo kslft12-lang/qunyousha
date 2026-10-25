@@ -63,6 +63,7 @@ QYS.core = QYS.core || {};
         maxHp, hp: maxHp,
         hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null }, judges: [],
         oranges: 0,          // orange 计数（秋秋人）
+        blade: 0,            // 太刀等级 0无 1白刃 2黄刃 3红刃（花生酱酱酱）
         alive: true, revealed: identity === '主', turn: null, io: null,
       };
       p.io = ioFor ? ioFor(p) : null;
@@ -195,10 +196,11 @@ QYS.core = QYS.core || {};
       return Math.max(1, d);
     };
     game.inShaRange = (a, b) => {
-      // 武器射程在卡牌定义上（QYS.def），实例只有 defId/suit/number；狼牙棒主公技攻击范围+1
+      // 武器射程在卡牌定义上（QYS.def），实例只有 defId/suit/number；狼牙棒主公技与太刀白刃攻击范围+1
       const w = a.equips.weapon ? QYS.def(a.equips.weapon) : null;
       const langya = a.identity === '主' && game.hasSkill(a, 'sk_langyabang') ? 1 : 0;
-      return game.distance(a, b) <= (w?.range ?? 1) + langya;
+      const bladeRange = game.hasSkill(a, 'sk_taidao') && (a.blade || 0) >= 1 ? 1 : 0;
+      return game.distance(a, b) <= (w?.range ?? 1) + langya + bladeRange;
     };
 
     // ---- 问答（引擎与决策者之间的唯一通道，人类/机器人同一接口）----
@@ -317,6 +319,12 @@ QYS.core = QYS.core || {};
       }
       if (!(await game.dodgeCheck(target, 'sha'))) {
         await game.damage({ source, target, amount: 1 + bonus, tag: '杀' });
+        // 太刀高手：以杀杀死敌人 → 跌落一个刃等级
+        if (!target.alive && source && game.hasSkill(source, 'sk_taidao') && source.blade > 0) {
+          source.blade--;
+          game.log(`【太刀高手】${source.name} 以杀毙敌，太刀跌落至 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
+          game.update();
+        }
         return true;
       }
       return false;
@@ -457,6 +465,7 @@ QYS.core = QYS.core || {};
         identity: (p.revealed || game.over || p.seat === seat) ? p.identity : null,
         skillIds: p.skillIds,
         oranges: p.oranges || 0,
+        blade: p.blade || 0,
         toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
         ladder: !!p.ladderFail,
         locked: game.isLocked(p),

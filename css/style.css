@@ -162,6 +162,20 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 1px 3px #00000088;
   cursor: help;
 }
+.bladeIcon {
+  position: absolute; top: -4px; right: -6px;
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  font-family: var(--display); font-size: 12px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid #666;
+  background: #1a1a1a;
+  box-shadow: 0 1px 3px #00000088;
+  cursor: help;
+}
+.bladeIcon.b1 { color: #f2f2f2; border-color: #cfcfcf; }
+.bladeIcon.b2 { color: #ffd54a; border-color: #c9a227; }
+.bladeIcon.b3 { color: #ff5a4a; border-color: #c23b2e; }
 
 .pinfo { min-width: 0; flex: 1; }
 .pname { font-family: var(--display); font-size: 17px; display: flex; align-items: center; gap: 6px; }

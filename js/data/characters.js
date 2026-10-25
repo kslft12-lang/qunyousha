@@ -45,6 +45,21 @@ QYS.data.skills = {
     desc: '当你被【杀】指定为目标时，你可以将任意一张手牌当作【闪】打出。',
   },
 
+  // 【无膝盖之人】：无法装备坐骑（+1马/-1马对其不可使用）。实现在 rules.js playInfo。
+  sk_wuxigai: {
+    name: '无膝盖之人',
+    type: 'trigger',
+    desc: '锁定技。你无法装备坐骑（+1马与-1马均不可装备）。',
+  },
+
+  // 【太刀高手】：每使用一次【杀】太刀永久升级：无→白刃（攻击范围+1）→黄刃（每回合两张【杀】）→红刃（【杀】伤害+1）；
+  // 以【杀】杀死敌人则跌落一个刃等级。升级实现在 cards.js【杀】效果，范围/上限/掉级在 inShaRange/canUse/shaResolve。
+  sk_taidao: {
+    name: '太刀高手',
+    type: 'trigger',
+    desc: '你每使用一次【杀】，太刀永久升级：无→白刃（攻击范围+1）→黄刃（每回合可使用两次【杀】）→红刃（所有【杀】伤害+1）；若你以【杀】杀死一名角色，太刀跌落一个等级。',
+  },
+
   // 【呜呜呜袜】：每受到伤害时，令伤害来源弃置一张手牌。
   // TODO(规则): 描述为"丢弃一张牌"，暂按手牌实现（装备/判定区不参与）
   sk_wuwuwuwa: {
@@ -285,7 +300,7 @@ QYS.data.characters = [
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
-  { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji'] },
+  { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
