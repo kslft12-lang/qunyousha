@@ -147,11 +147,10 @@ QYS.data.characters = [
   // TODO: 路人群友为测试用白板武将（人数超出角色池时以其补位，允许重复）
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
-  // TODO: 包子大王 / 00的画 头像待放入 assets/characters/baozi.png 与 hua00.png（当前显示首字圆徽）
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
-  { id: 'baozi', name: '包子大王', title: '群友', hp: 4, skills: ['sk_doushabao', 'sk_xiaolongbao'] },
-  { id: 'hua00', name: '00的画', title: '群友', hp: 4, skills: ['sk_daoluan'] },
+  { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao'] },
+  { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
 ];
