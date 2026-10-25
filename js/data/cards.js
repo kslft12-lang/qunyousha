@@ -76,7 +76,7 @@ QYS.data.cards = [
     desc: '当你成为【杀】或【万箭齐发】的目标时打出，令该牌对你无效。',
   },
   {
-    id: 'tao', name: '桃', type: 'basic', deckCount: 10,
+    id: 'tao', name: '桃', type: 'basic', deckCount: 10, img: true,
     desc: '出牌阶段对自己使用，回复1点体力；或有角色濒死时对其使用，将其体力回复至1点。',
     canUse: (g, u) => u.hp < u.maxHp,
     async effect(g, { user }) { await g.heal(user, 1); },
@@ -93,14 +93,14 @@ QYS.data.cards = [
 
   // ---- 锦囊牌 ----
   {
-    id: 'wuzhong', name: '无中生有', type: 'trick', deckCount: 4,
+    id: 'wuzhong', name: '无中生有', type: 'trick', deckCount: 4, img: true,
     desc: '摸两张牌。',
     async effect(g, { user, card }) {
       if (!(await g.askWuxie({ user, card }))) await g.drawCards(user, 2);
     },
   },
   {
-    id: 'chaiqiao', name: '过河拆桥', type: 'trick', deckCount: 6,
+    id: 'chaiqiao', name: '过河拆桥', type: 'trick', deckCount: 6, img: true,
     desc: '弃置一名其他角色区域里的一张牌。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.anyCards(t)) },
     async effect(g, { user, targets, card }) {
@@ -128,7 +128,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'juedou', name: '决斗', type: 'trick', deckCount: 3,
+    id: 'juedou', name: '决斗', type: 'trick', deckCount: 3, img: true,
     desc: '与目标角色决斗：由其开始轮流打出【杀】，首先打不出的一方受到1点伤害。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u) },
     async effect(g, { user, targets, card }) {
@@ -205,7 +205,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'wuxie', name: '无懈可击', type: 'trick', deckCount: 6, noPlay: true,
+    id: 'wuxie', name: '无懈可击', type: 'trick', deckCount: 6, noPlay: true, img: true,
     desc: '一张锦囊牌生效前打出，抵消之。',
   },
 
