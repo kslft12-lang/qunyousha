@@ -259,5 +259,48 @@ async function play(n) {
       if (!(!far.alive && hua.blade === 2)) throw new Error('杀敌应跌落一级，当前 ' + hua.blade);
       console.log('无膝盖/太刀高手检查 ✓（禁坐骑/升级链/红刃2伤/杀敌掉级）');
     }
+
+    // 呜呜呜袜改版 / 隐身 / 香香的检查
+    {
+      let captured = null; // 捕获凑凑的捣乱狂候选列表
+      const io10 = over => ({
+        async chooseCard(p, o) { return p.hand.find(c => (o.filter ? o.filter(c) : true) && (!over.card || over.card(c))) || null; },
+        async chooseBool() { return over.bool !== false; },
+        async chooseTargets(p, o) { captured = o.candidates; return o.candidates.slice(0, o.max || 1); },
+        async askPlay() { return { type: 'end' }; }, log() {}, update() {},
+      });
+      const g10 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 1, names: ['魔', '甲', '乙', '丙', '丁'], ioFor: () => io10({}) });
+      const [mo, jia, yi] = g10.players;
+      mo.skillIds = ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'];
+      // 呜呜呜袜：来源有手牌且同意 → 交牌、伤害照常
+      jia.hand.length = 0; jia.hand.push({ defId: 'sha', suit: '♠', number: 5 });
+      const moHandB = mo.hand.length, moHpB = mo.hp;
+      await g10.damage({ source: jia, target: mo, amount: 1, tag: '杀' });
+      if (mo.hp !== moHpB - 1 || mo.hand.length !== moHandB + 1 || jia.hand.length !== 0) throw new Error('呜呜呜袜交牌分支异常');
+      // 来源无手牌 → 只能令伤害无效
+      await g10.damage({ source: jia, target: mo, amount: 2, tag: '杀' });
+      if (mo.hp !== moHpB - 1) throw new Error('无手牌来源的伤害应无效');
+      // 来源拒绝（bool false）→ 伤害无效
+      jia.io = io10({ bool: false });
+      jia.hand.length = 0; jia.hand.push({ defId: 'sha', suit: '♠', number: 6 });
+      await g10.damage({ source: jia, target: mo, amount: 1, tag: '杀' });
+      if (mo.hp !== moHpB - 1 || mo.hand.length !== moHandB + 1) throw new Error('拒绝交牌应令伤害无效');
+      // 隐身：决斗/拆桥/乐不思蜀候选不含魔女，杀不受影响
+      const info = id => QYS.rules.playInfo(g10, jia, { defId: id, suit: '♠', number: 3 });
+      for (const id of ['juedou', 'chaiqiao', 'lebu']) {
+        const t = info(id).targets;
+        if (t.includes(mo)) throw new Error(id + ' 不应可选魔女');
+        if (!t.includes(yi)) throw new Error(id + ' 应仍可选其他角色');
+      }
+      // 杀仍可选魔女（需 turn 供 canUse 检查）
+      jia.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+      const shaInfo = QYS.rules.playInfo(g10, jia, { defId: 'sha', suit: '♠', number: 7 });
+      if (!shaInfo.targets.includes(mo)) throw new Error('杀仍应可选魔女');
+      // 香香的：凑凑的捣乱狂候选不含魔女
+      yi.skillIds = ['sk_daoluan'];
+      await g10.emit('turnStart', { player: yi });
+      if (captured && captured.includes(mo)) throw new Error('凑凑的捣乱狂不应可选魔女');
+      console.log('呜呜呜袜改版/隐身/香香的检查 ✓（交牌或无效/单体锦囊不可选/捣乱狂不可选）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

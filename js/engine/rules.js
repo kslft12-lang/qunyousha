@@ -16,12 +16,16 @@ QYS.rules = {};
       return { ok: false, targets: [] };
     if (d.type === 'equip') return { ok: true, targets: [] };
     if (d.type === 'delayed') {
-      if (d.id === 'shandian') return { ok: true, targets: [] }; // 闪电放在自己判定区
-      const cands = game.othersAlive(p);
+      if (d.id === 'shandian') return { ok: true, targets: [] };
+      // 隐身：不能被单体锦囊（乐不思蜀）选中为目标
+      const cands = game.othersAlive(p).filter(t => !game.hasSkill(t, 'sk_yinshen'));
       return { ok: cands.length > 0, targets: cands };
     }
     if (d.canUse && !d.canUse(game, p)) return { ok: false, targets: [] };
-    const cands = d.target?.candidates ? d.target.candidates(game, p) : [];
+    let cands = d.target?.candidates ? d.target.candidates(game, p) : [];
+    // 隐身：不能被单体锦囊（含乐不思蜀等延迟锦囊）选中为目标
+    if ((d.type === 'trick' || d.type === 'delayed') && (d.target?.count ?? 0) === 1)
+      cands = cands.filter(t => !game.hasSkill(t, 'sk_yinshen'));
     const need = d.target?.count ?? 0;
     return { ok: cands.length >= need, targets: cands };
   };

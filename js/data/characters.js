@@ -60,28 +60,44 @@ QYS.data.skills = {
     desc: '你每使用一次【杀】，太刀永久升级：无→白刃（攻击范围+1）→黄刃（每回合可使用两次【杀】）→红刃（所有【杀】伤害+1）；若你以【杀】杀死一名角色，太刀跌落一个等级。',
   },
 
-  // 【呜呜呜袜】：每受到伤害时，令伤害来源弃置一张手牌。
-  // TODO(规则): 描述为"丢弃一张牌"，暂按手牌实现（装备/判定区不参与）
+  // 【呜呜呜袜】：受到伤害时，伤害来源二选一：交给魔女一张手牌（无手牌时不可选），或令此伤害无效。
+  // 实现在 beforeDamaged 钩子（可改 payload.amount=0 实现伤害无效）。
   sk_wuwuwuwa: {
     name: '呜呜呜袜',
     type: 'trigger',
-    desc: '当你受到伤害时，令伤害来源弃置一张手牌。',
+    desc: '当你受到伤害时，伤害来源须做出选择：1.交给你一张手牌（其没有手牌时不可选择此项）；2.令此伤害无效。',
     hooks: {
-      async afterDamaged(game, p, payload) {
+      async beforeDamaged(game, p, payload) {
         if (payload.target !== p || payload.amount <= 0) return;
         const src = payload.source;
-        if (!src || !src.alive || !src.hand.length) return;
-        game.log(`${p.name} 的【呜呜呜袜】触发`, 'skill');
-        const c = await game.askCard(src, {
-          filter: () => true, tag: '弃牌',
-          hint: `${p.name} 的【呜呜呜袜】：请弃置一张手牌`, cancelText: '随机弃一张',
-        });
-        const card = c && src.hand.includes(c) ? c : src.hand[(Math.random() * src.hand.length) | 0];
-        game.discardFromHand(src, card, '弃置');
-        game.log(`${src.name} 弃置了${QYS.cardLabel(card)}`, 'system');
+        if (!src || !src.alive || src === p) return;
+        if (src.hand.length && await game.askBool(src, `${p.name} 的【呜呜呜袜】：交给她一张手牌？（拒绝则此伤害无效）`, { tag: '技能' })) {
+          const c = await game.askCard(src, { filter: () => true, tag: '弃牌', hint: '【呜呜呜袜】：交给对方一张手牌', cancelText: '随机交一张' });
+          const give = c && src.hand.includes(c) ? c : src.hand[(Math.random() * src.hand.length) | 0];
+          src.hand.splice(src.hand.indexOf(give), 1);
+          p.hand.push(give);
+          game.log(`${src.name} 交给 ${p.name} 一张手牌（呜呜呜袜）`, 'skill');
+        } else {
+          payload.amount = 0;
+          game.log(`${p.name} 的【呜呜呜袜】令伤害无效`, 'skill');
+        }
         game.update();
       },
     },
+  },
+
+  // 【隐身】：不能被单体锦囊牌（过河拆桥/顺手牵羊/决斗/乐不思蜀等）选中为目标。实现在 rules.js playInfo 候选过滤。
+  sk_yinshen: {
+    name: '隐身',
+    type: 'trigger',
+    desc: '锁定技。你不能被单体锦囊牌（如【过河拆桥】【顺手牵羊】【决斗】【乐不思蜀】）选中为目标。',
+  },
+
+  // 【香香的】：不能被【凑凑的捣乱狂】选为目标。实现在 sk_daoluan 的候选过滤。
+  sk_xiangxiang: {
+    name: '香香的',
+    type: 'trigger',
+    desc: '锁定技。你不能被【凑凑的捣乱狂】选为目标。',
   },
 
   // 【万人迷】：需要使用/打出【闪】时（含被杀指定、万箭齐发），可选择场上任一其他角色替你打出【闪】；
@@ -279,7 +295,8 @@ QYS.data.skills = {
     hooks: {
       async turnStart(game, p, payload) {
         if (payload.player !== p) return;
-        const cands = game.alive();
+        // 香香的：不能被凑凑的捣乱狂选为目标
+        const cands = game.alive().filter(q => !game.hasSkill(q, 'sk_xiangxiang'));
         if (cands.length < 2) return;
         if (!(await game.askBool(p, '是否发动【凑凑的捣乱狂】？将两名角色的手牌洗混随机分配', { tag: '技能' }))) return;
         const sel = await game.askTargets(p, { candidates: cands, min: 2, max: 2, hint: '【凑凑的捣乱狂】：选择两名角色（可含自己）' });
@@ -301,7 +318,7 @@ QYS.data.characters = [
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
-  { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa'] },
+  { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
   { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
