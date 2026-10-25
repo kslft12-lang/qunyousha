@@ -67,7 +67,7 @@ qunyousha/
 
 ## 添加群友武将（三步）
 
-1. **头像**：把图片放进 `assets/characters/`，以武将 `id` 命名，如 `qunyou_1.png`（建议 200×200 正方形；缺图时界面自动用名字首字圆徽占位）。
+1. **头像**：把图片放进 `assets/characters/`，以武将 `id` 命名（支持 png/jpeg/jpg，如 `hxtyd.jpeg`；建议 200×200 正方形）。缺图时界面自动用名字首字圆徽占位；非 png 头像请在角色数据里加 `avatar: 'jpeg'`（或 `'jpg'`）声明扩展名，避免加载闪烁。
 2. **资料**：在 `js/data/characters.js` 的 `QYS.data.characters` 里改/加一条：
    ```js
    { id: 'qunyou_1', name: '群友甲', title: '潜水冠军', hp: 4, skills: ['sk_taigang', 'sk_jichou'] }

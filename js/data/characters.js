@@ -39,5 +39,6 @@ QYS.data.skills = {
 QYS.data.characters = [
   // TODO: 路人群友为测试用白板武将
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
-  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, skills: ['sk_xueshengzhanzheng'] },
+  // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
+  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
 ];

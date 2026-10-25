@@ -60,8 +60,11 @@ QYS.ui.create = function (root) {
   // ---- 渲染 ----
   function avatarHtml(p) {
     const ch = charOf(p);
-    // 图片约定：assets/characters/<id>.png|.jpeg|.jpg；全部缺失时 onerror 链最终移除 img，露出首字圆徽
-    return `<div class="avatar" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${p.charId}.png" alt="" data-ai="0" data-cid="${p.charId}" onerror="QYS.avatarNext(this)"></div>`;
+    // 图片约定：assets/characters/<id>.png|.jpeg|.jpg；角色可用 avatar 字段声明扩展名，
+    // 未声明时默认 png 并由 QYS.avatarNext 逐个探测。全部缺失时移除 img，露出首字圆徽。
+    const exts = ['png', 'jpeg', 'jpg'];
+    const ext = ch?.avatar && exts.includes(ch.avatar) ? ch.avatar : 'png';
+    return `<div class="avatar" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${p.charId}.${ext}" alt="" data-ai="${exts.indexOf(ext)}" data-cid="${p.charId}" onerror="QYS.avatarNext(this)"></div>`;
   }
 
   function badgeHtml(p) {
