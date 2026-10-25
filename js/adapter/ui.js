@@ -143,10 +143,12 @@ QYS.ui.create = function (root) {
   }
 
   // 统一的卡面渲染：data-defid/suit/num 供悬浮详情，attrs 附加 data-card-idx / data-by 等
+  // 贴图类：cards 数据里 art 字段（curse 诅咒牌黑紫渐变边框 / shroom 蘑菇牌环绕特效边框）
   function faceHtml(card, attrs = '', extra = '') {
     const d = QYS.def(card);
     const red = colorOf(card.suit) === 'red';
-    return `<div class="card mini ${red ? 'redSuit' : 'blackSuit'} ${extra}" data-defid="${card.defId}" data-suit="${card.suit}" data-num="${card.number}" ${attrs}>
+    const artCls = d.art ? ` art${d.art}` : '';
+    return `<div class="card mini${artCls} ${red ? 'redSuit' : 'blackSuit'} ${extra}" data-defid="${card.defId}" data-suit="${card.suit}" data-num="${card.number}" ${attrs}>
       <div class="corner">${numStr(card.number)}<br>${card.suit}</div>
       <div class="cname">${d.name}</div>
     </div>`;

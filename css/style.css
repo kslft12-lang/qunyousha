@@ -527,6 +527,44 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid #4a6a58; border-radius: 6px;
 }
 
+/* ---------- 卡面贴图：诅咒牌黑紫渐变边框 / 蘑菇牌环绕特效边框 ---------- */
+.card.artcurse {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(160deg, #efe4cf, #d8cbb0) padding-box,
+    linear-gradient(150deg, #0d0518, #4a1a78 25%, #a86ee0 50%, #2a0a4a 75%, #0d0518) border-box;
+  box-shadow: 0 0 7px #7a2ac266;
+}
+.card.artcurse .corner, .card.artcurse .cname { color: #5d3296; }
+
+@property --moguAngle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.card.artshroom {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(160deg, #f7efdd, #e8dcc2) padding-box,
+    conic-gradient(from var(--moguAngle), #7a4a1a, #d29a4a 60deg, #f2dfae 120deg, #b8452a 200deg, #7a4a1a 360deg) border-box;
+  animation: moguSpin 2.8s linear infinite;
+}
+@keyframes moguSpin { to { --moguAngle: 360deg; } }
+/* 🍄 环绕点缀：对角两枚，随边框流光轻微弹跳 */
+.card.artshroom::before, .card.artshroom::after {
+  content: '🍄';
+  position: absolute;
+  font-size: 9px; line-height: 1;
+  z-index: 2;
+  animation: moguBounce 1.6s ease-in-out infinite;
+}
+.card.artshroom::before { top: 2px; right: 2px; }
+.card.artshroom::after { bottom: 2px; left: 2px; animation-delay: .8s; }
+@keyframes moguBounce {
+  0%, 100% { transform: scale(1) rotate(-10deg); }
+  50% { transform: scale(1.25) rotate(10deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card.artshroom { animation: none; }
+  .card.artshroom::before, .card.artshroom::after { animation: none; }
+}
+
 /* ================= 响应式（置于文件末尾以覆盖上文所有规则） ================= */
 
 /* 平板窄屏：保留椭圆环，仅收窄武将牌 */
