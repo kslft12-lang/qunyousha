@@ -36,14 +36,18 @@ QYS.data.cards = [
     },
     canUse: (g, u) => {
       const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
-      if (w && w.unlimitedSha) return true;
+      // 狼牙棒（主公技）：诸葛连弩对其无效
+      const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
+      if (w && w.unlimitedSha && !langyaLord) return true;
       return u.turn.shaUsed < (g.hasSkill(u, 'sk_guantangbao') ? 2 : 1);
     },
     async effect(g, { user, targets }) {
       const tgt = targets[0];
       // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸
       const guantang = g.hasSkill(user, 'sk_guantangbao') && tgt.hp === 1;
-      const bonus = user.turn.wine ? 1 : 0;
+      // 狼牙棒（主公技）：杀伤害+1
+      const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
+      const bonus = (user.turn.wine ? 1 : 0) + langya;
       user.turn.wine = false;
       user.turn.shaUsed++;
       const hit = await g.shaResolve(user, tgt, bonus);

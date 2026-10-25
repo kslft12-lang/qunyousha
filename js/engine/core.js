@@ -195,9 +195,10 @@ QYS.core = QYS.core || {};
       return Math.max(1, d);
     };
     game.inShaRange = (a, b) => {
-      // 武器射程在卡牌定义上（QYS.def），实例只有 defId/suit/number
+      // 武器射程在卡牌定义上（QYS.def），实例只有 defId/suit/number；狼牙棒主公技攻击范围+1
       const w = a.equips.weapon ? QYS.def(a.equips.weapon) : null;
-      return game.distance(a, b) <= (w?.range ?? 1);
+      const langya = a.identity === '主' && game.hasSkill(a, 'sk_langyabang') ? 1 : 0;
+      return game.distance(a, b) <= (w?.range ?? 1) + langya;
     };
 
     // ---- 问答（引擎与决策者之间的唯一通道，人类/机器人同一接口）----
@@ -208,7 +209,14 @@ QYS.core = QYS.core || {};
         const asked = QYS.data.cards.find(c => c.name === opts.tag);
         if (asked && asked.id !== 'sha' && asked.id !== 'shan') return null;
       }
-      return p.io.chooseCard(p, opts);
+      const card = await p.io.chooseCard(p, opts);
+      // 梯子专家：本回合被盯上的角色使用任意卡牌有一半概率失败（弃牌不受影响）
+      if (card && p.ladderFail && opts.tag !== '弃牌' && Math.random() < 0.5) {
+        game.log(`${p.name} 的卡牌因【梯子专家】造成的网络波动而使用失败`, 'skill');
+        game.update();
+        return null;
+      }
+      return card;
     };
     game.askBool = async (p, hint, extra = {}) => {
       if (!p.alive || !p.io) return false;
@@ -301,6 +309,12 @@ QYS.core = QYS.core || {};
     // 结算一次【杀】：目标闪避成功返回 false；未闪避（造成伤害）返回 true（灌汤包等技能依此判定）
     game.shaResolve = async (source, target, bonus = 0) => {
       if (!target.alive) return false;
+      // 新疆网络：对你使用的【杀】一半概率因"网络波动"自动失效（无需闪避）
+      if (game.hasSkill(target, 'sk_xinjiangwang') && Math.random() < 0.5) {
+        game.log(`${target.name} 的【新疆网络】波动，${source ? source.name + ' 的' : ''}【杀】自动失效`, 'skill');
+        game.update();
+        return false;
+      }
       if (!(await game.dodgeCheck(target, 'sha'))) {
         await game.damage({ source, target, amount: 1 + bonus, tag: '杀' });
         return true;
@@ -444,6 +458,7 @@ QYS.core = QYS.core || {};
         skillIds: p.skillIds,
         oranges: p.oranges || 0,
         toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
+        ladder: !!p.ladderFail,
         locked: game.isLocked(p),
         handCount: p.hand.length,
         hand: p.seat === seat ? p.hand.map(c => ({ ...c })) : undefined,

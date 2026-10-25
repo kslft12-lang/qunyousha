@@ -200,6 +200,55 @@ QYS.data.skills = {
     },
   },
 
+  // 【狼牙棒】：主公技。你的【杀】伤害+1、攻击范围+1；【诸葛连弩】对你无效。
+  // 伤害与连弩封禁实现在 cards.js 的【杀】，攻击范围实现在 game.inShaRange。
+  sk_langyabang: {
+    name: '狼牙棒',
+    type: 'trigger',
+    desc: '主公技。你的【杀】伤害+1，攻击范围+1；【诸葛连弩】对你无效。',
+  },
+
+  // 【新疆网络】：对你使用的【杀】都有 1/2 概率因"网络波动"自动失效（无需闪避）。实现在 game.shaResolve。
+  sk_xinjiangwang: {
+    name: '新疆网络',
+    type: 'trigger',
+    desc: '锁定技。对你使用的【杀】都有二分之一的概率因为「网络波动」而自动失效。',
+  },
+
+  // 【梯子专家】：回合开始时选择一名角色，其须选择：交给噜噜打汪一张手牌，
+  // 或本回合内使用任意卡牌都有 1/2 概率失败（无手牌只能选后者）。失败判定在 game.askCard。
+  sk_ladder: {
+    name: '梯子专家',
+    type: 'trigger',
+    desc: '回合开始时，你可以选择一名角色，该角色须做出选择：交给你一张手牌；或本回合内其使用任意卡牌都有二分之一的概率失败（无手牌则只能选择后者）。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        game.players.forEach(q => { q.ladderFail = false; }); // 清理上一回合残留
+        const cands = game.othersAlive(p);
+        if (!cands.length) return;
+        if (!(await game.askBool(p, '是否发动【梯子专家】？', { tag: '技能' }))) return;
+        const sel = await game.askTargets(p, { candidates: cands, min: 1, max: 1, hint: '【梯子专家】：选择本回合盯上的角色' });
+        if (!sel || !sel.length) return;
+        const t = sel[0];
+        if (t.hand.length && await game.askBool(t, `被 ${p.name} 的【梯子专家】盯上：交给他一张手牌？（拒绝则本回合你使用卡牌有一半概率失败）`, { tag: '技能' })) {
+          const c = await game.askCard(t, { filter: () => true, tag: '弃牌', hint: `【梯子专家】：交给 ${p.name} 一张手牌`, cancelText: '随机交一张' });
+          const give = c && t.hand.includes(c) ? c : t.hand[(Math.random() * t.hand.length) | 0];
+          t.hand.splice(t.hand.indexOf(give), 1);
+          p.hand.push(give);
+          game.log(`${t.name} 交给了 ${p.name} 一张手牌`, 'skill');
+        } else {
+          t.ladderFail = true;
+          game.log(`${t.name} 本回合使用卡牌有一半概率失败（${p.name} 的【梯子专家】）`, 'skill');
+        }
+        game.update();
+      },
+      async phaseEnd(game, p, payload) {
+        if (payload.player === p && payload.phase === '结束') game.players.forEach(q => { q.ladderFail = false; });
+      },
+    },
+  },
+
   // 【上厕所要脱裤子】：与【一起上厕所】联动：一起上厕所的对象其装备栏中的防具放入你的手牌（坐骑和武器不算防具）。
   sk_tuokuzi: {
     name: '上厕所要脱裤子',
@@ -245,4 +294,6 @@ QYS.data.characters = [
   { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
   // TODO: 颜文字小变态头像待补 assets/characters/yanwenzi.png（当前显示首字圆徽）
   { id: 'yanwenzi', name: '颜文字小变态', title: '群友', hp: 4, skills: ['sk_toilet', 'sk_tuokuzi'] },
+  // TODO: 噜噜打汪头像待补 assets/characters/lulu.png（当前显示首字圆徽）
+  { id: 'lulu', name: '噜噜打汪', title: '群友', hp: 4, skills: ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'] },
 ];

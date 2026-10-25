@@ -114,6 +114,7 @@ QYS.ui.create = function (root) {
     const ch = charOf(p);
     const locked = g.isLocked ? g.isLocked(p) : !!p.locked;
     const inToilet = g.toilet ? (g.toilet.a === p || g.toilet.b === p) : !!p.toilet;
+    const laddered = !!p.ladderFail || !!p.ladder;
     const ringCls = ringPos ? ' ringP' : '';
     const styleAttr = ringPos ? ` style="left:${ringPos.x}%;top:${ringPos.y}%"` : '';
     // orange 计数（秋秋人）：头像下方橙色徽标
@@ -126,7 +127,7 @@ QYS.ui.create = function (root) {
         <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
-        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}</div>
+        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
         <div class="skRow"><span class="lbl">技能</span>${skChips || '<span class="lbl">无</span>'}</div>
       </div>
       ${hang ? `<div class="hangRow">${hang}</div>` : ''}

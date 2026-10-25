@@ -168,5 +168,57 @@ async function play(n) {
       if (g7.distance(me, far) !== 3) throw new Error('解除后距离应恢复（含+1马为3）');
       console.log('一起上厕所检查 ✓（强制距离1/夺防具/下回合解除）');
     }
+
+    // 噜噜打汪检查：狼牙棒（主公范围/伤害+1/连弩无效）、新疆网络（50%失效）、梯子专家（交牌/盯人失败判定）
+    {
+      const io8 = over => ({ async chooseCard(p, o) { return p.hand.find(c => (o.filter ? o.filter(c) : true) && (!over.card || over.card(c))) || null; }, async chooseBool() { return over.bool !== false; }, async chooseTargets(p, o) { return [o.candidates[0]]; }, async askPlay() { return { type: 'end' }; }, log() {}, update() {} });
+      const g8 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['噜', '甲', '乙', '丙', '丁'], ioFor: () => io8({ card: () => false }) });
+      const [lulu, jia, yi] = g8.players;
+      lulu.skillIds = ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'];
+      if (!g8.inShaRange(lulu, yi)) throw new Error('狼牙棒主公攻击范围应+1覆盖距离2');
+      lulu.identity = '反';
+      if (g8.inShaRange(lulu, yi)) throw new Error('非主公狼牙棒不应生效');
+      lulu.identity = '主';
+      lulu.turn = { shaUsed: 1, wine: false, skipPlay: false, skillUsed: false };
+      lulu.equips.weapon = { defId: 'liannu', suit: '♦', number: 1 };
+      const shaDef2 = QYS.data.cards.find(c => c.id === 'sha');
+      if (shaDef2.canUse(g8, lulu)) throw new Error('狼牙棒主公连弩应无效');
+      lulu.equips.weapon = null;
+      // 伤害+1：甲无闪无网络，挨打掉2血
+      jia.hand.length = 0;
+      const hpB = jia.hp;
+      await shaDef2.effect(g8, { user: lulu, targets: [jia], card: { defId: 'sha', suit: '♠', number: 7 } });
+      if (jia.hp !== hpB - 2) throw new Error('狼牙棒主公杀伤害应+1，实际掉 ' + (hpB - jia.hp));
+      // 新疆网络：对乙的杀 100 次统计，应有失效也有命中
+      yi.skillIds = ['sk_xinjiangwang'];
+      yi.hand.length = 0;
+      let miss = 0, hit = 0;
+      for (let k = 0; k < 100; k++) {
+        yi.hp = 4;
+        (await g8.shaResolve(lulu, yi, 0)) ? hit++ : miss++;
+      }
+      if (miss === 0 || hit === 0 || miss < 30 || miss > 70) throw new Error('新疆网络失效比例异常: ' + miss + '/100');
+      // 梯子专家：盯甲（甲选交牌）→ 手牌转移
+      yi.skillIds = [];
+      jia.hand.length = 0; jia.hand.push({ defId: 'shan', suit: '♦', number: 2 });
+      const luluHandB = lulu.hand.length;
+      await g8.emit('turnStart', { player: lulu });
+      if (jia.hand.length !== 0 || lulu.hand.length !== luluHandB + 1) throw new Error('梯子专家交牌未转移');
+      // 甲改为拒绝（bool false）→ ladderFail；用牌失败统计
+      g8.players.forEach(q => { q.ladderFail = false; });
+      jia.hand.length = 0; jia.hand.push({ defId: 'shan', suit: '♦', number: 3 });
+      lulu.hand.length = 0;
+      jia.io = io8({ card: () => false, bool: false }); // 换成会拒绝交牌的决策
+      await QYS.data.skills.sk_ladder.hooks.turnStart(g8, lulu, { player: lulu });
+      if (!jia.ladderFail) throw new Error('拒绝交牌应被标记 ladderFail');
+      jia.io = io8({}); // 统计阶段：桩正常给牌，失败只能来自梯子专家判定
+      let fail = 0;
+      for (let k = 0; k < 100; k++) {
+        const r = await g8.askCard(jia, { filter: c => QYS.def(c).id === 'shan', tag: '闪' });
+        if (!r) fail++;
+      }
+      if (fail < 30 || fail > 70) throw new Error('梯子用牌失败比例异常: ' + fail + '/100');
+      console.log('噜噜打汪检查 ✓（狼牙棒范围/伤害/连弩无效、新疆网络' + miss + '%失效、梯子专家交牌/失败' + fail + '%）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });
