@@ -15,6 +15,13 @@ QYS.avatarNext = function (img) {
   }
 };
 
+// 通用角色头像 HTML（牌桌/图鉴共用）：图片约定 assets/characters/<id>.<avatar|png>
+QYS.charAvatar = function (ch, cls = '') {
+  const exts = ['png', 'jpeg', 'jpg'];
+  const ext = ch?.avatar && exts.includes(ch.avatar) ? ch.avatar : 'png';
+  return `<div class="avatar ${cls}" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${ch.id}.${ext}" alt="" data-ai="${exts.indexOf(ext)}" data-cid="${ch.id}" onerror="QYS.avatarNext(this)"></div>`;
+};
+
 QYS.ui.create = function (root) {
   const { colorOf, numStr } = QYS.util;
   const ID_NAME = QYS.core.ID_NAME;
@@ -59,12 +66,7 @@ QYS.ui.create = function (root) {
 
   // ---- 渲染 ----
   function avatarHtml(p) {
-    const ch = charOf(p);
-    // 图片约定：assets/characters/<id>.png|.jpeg|.jpg；角色可用 avatar 字段声明扩展名，
-    // 未声明时默认 png 并由 QYS.avatarNext 逐个探测。全部缺失时移除 img，露出首字圆徽。
-    const exts = ['png', 'jpeg', 'jpg'];
-    const ext = ch?.avatar && exts.includes(ch.avatar) ? ch.avatar : 'png';
-    return `<div class="avatar" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${p.charId}.${ext}" alt="" data-ai="${exts.indexOf(ext)}" data-cid="${p.charId}" onerror="QYS.avatarNext(this)"></div>`;
+    return QYS.charAvatar(charOf(p));
   }
 
   function badgeHtml(p) {
@@ -151,8 +153,14 @@ QYS.ui.create = function (root) {
   function actionBarHtml() {
     const st = view.state;
     if (!st) return '';
-    if (st.mode === 'play')
-      return `${st.canSkill ? `<button class="btn skill" data-act="skill">发动【${st.skillName}】</button>` : ''}<button class="btn primary" data-act="end">结束出牌</button>`;
+    if (st.mode === 'play') {
+      // 主动技（可用时）给按钮；触发技常驻展示为"被动"标签（悬浮看说明），条件满足时会自动询问
+      const g = view.game;
+      const me = g && g.humanSeat != null ? g.players[g.humanSeat] : null;
+      const passives = (me?.skillIds || [])
+        .map(id => QYS.data.skills[id]).filter(s => s && s.type !== 'active');
+      return `${st.canSkill ? `<button class="btn skill" data-act="skill">发动【${st.skillName}】</button>` : ''}${passives.map(s => `<span class="chip skChip passiveChip">被动·${s.name}</span>`).join('')}<button class="btn primary" data-act="end">结束出牌</button>`;
+    }
     if (st.mode === 'targets')
       return `<button class="btn primary" data-act="confirm" ${st.selected.length >= st.min ? '' : 'disabled'}>确定</button><button class="btn" data-act="cancel">取消</button>`;
     if (st.mode === 'chooseCard')

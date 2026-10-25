@@ -430,6 +430,7 @@ button { font-family: inherit; cursor: pointer; }
 .skRow { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
 .skRow .lbl { font-size: 10px; color: var(--dim); }
 .chip.skChip { border-color: #6a55a0; color: #cfc3e8; cursor: help; }
+.chip.passiveChip { border-style: dashed; }
 .dBy { font-size: 11px; color: var(--gold); margin: 2px 0 6px; }
 .dTitle.skillTitle { color: var(--skill); }
 #cardDetail .dTitle.blackSuit { color: var(--paper); }

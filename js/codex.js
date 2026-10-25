@@ -38,7 +38,7 @@ QYS.codex = {};
         .map(s => `<div class="sk"><b>【${s.name}】</b><i>${s.type === 'active' ? '主动技' : '触发技'}</i>${s.desc || ''}</div>`)
         .join('');
       return `<div class="codexEntry">
-        <div class="avatar codexAvatar" data-initial="${ch.name.slice(0, 1)}"><img src="assets/characters/${ch.id}.png" alt="" onerror="this.remove()"></div>
+        ${QYS.charAvatar(ch, 'codexAvatar')}
         <div class="codexEntryBody">
           <div class="codexName">${ch.name}<span class="codexTitle">${ch.title || ''}</span><span class="chip">体力 ${ch.hp}</span></div>
           ${skills || '<div class="codexNone">暂无技能</div>'}
