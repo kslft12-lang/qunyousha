@@ -4,22 +4,27 @@
 
 ## 运行
 
-- **单机**：直接双击 `index.html`；或 `python -m http.server 8080` 后访问 http://localhost:8080
-- **局域网/公网联机**：见下方[公网联机部署](#公网联机部署)
+- **在线单机**：开启 GitHub Pages 后访问 `https://kslft12-lang.github.io/qunyousha/`（开启方法见下方「部署」），单机 / 全机器人演示 / 图鉴都能玩
+- **单机（本地）**：直接双击 `index.html`
+- **联机**：`node server.js [端口]`（默认 8123）。所有人浏览器打开 `http://<主机IP>:8123`，点「联机」输入昵称进入大厅；房主（0 号位）选人数点「开始联机对局」，空座位由机器人代打。服务器是权威引擎：客户端只收按座位裁剪的快照（别人的手牌/暗置身份不可见），决策经 WebSocket 回传；有人掉线时其座位自动转为机器人应答（90 秒超时兜底）
 
-## 公网联机部署
+## 部署
 
-最快方式（不需要买服务器、不需要注册账号，利用 Cloudflare 免费快速隧道）：
+**GitHub Pages（静态托管，本仓库直接可用）**
 
-1. 下载 [cloudflared Windows 版](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe)，放到 `tools/cloudflared.exe`（`tools/` 已被 gitignore，不入库）
-2. 双击 **`start-online.bat`**：它会同时启动游戏服务器（`node server.js 8123`）和公网隧道
-3. 隧道窗口会出现一行 `https://xxxx-xxxx.trycloudflare.com`，把它发到群里——群友浏览器打开、点「联机」输昵称进大厅即可；房主（先加入的人）开局，空座位机器人代打
+1. 打开 https://github.com/kslft12-lang/qunyousha → `Settings` → 左侧 `Pages`
+2. `Build and deployment` → Source 选 `Deploy from a branch` → Branch 选 `main`、目录 `/ (root)` → `Save`
+3. 等一两分钟，访问 https://kslft12-lang.github.io/qunyousha/ 即可
 
-注意：
+能力边界：GitHub Pages 只能托管静态页面，**单机 / 全机器人演示 / 图鉴可用；「联机」不可用**（页面上点联机会有明确提示）——因为联机需要一个常驻的 WebSocket 服务器，GitHub 不提供后端运行环境。
 
-- 快速隧道**每次重启网址都会变**；要固定网址需注册 Cloudflare 账号建命名隧道（`tools\cloudflared.exe tunnel login` 后按其文档创建并运行），或改用下面的部署平台
-- 服务器当前是"单房间、无鉴权"的框架实现：知道网址的人都能进入（对局开始后加入为观战），别用于需要私密性的场景
-- 有自己的云服务器：上传代码 → `node server.js 8123` → 安全组放行端口即可，建议用 `pm2 start server.js` 或 systemd 守护；也可推到 Render/Railway/Zeabur 等 Node 托管平台自动部署（启动命令 `node server.js`，平台会给公网域名）
+**自建联机服务器**
+
+- 局域网：任选一台电脑 `node server.js 8123`，群友访问 `http://<该机IP>:8123`
+- 公网二选一：
+  - 内网穿透：如 cloudflared 快速隧道（无需账号；历史提交 `2bf9911` 里有一键脚本，可用 `git show 2bf9911:start-online.bat` 找回）
+  - Node 托管平台：推到 Render / Railway / Zeabur 等，启动命令 `node server.js`，平台分配公网域名
+- 注意：服务器是"单房间、无鉴权"的框架实现，知道地址即可进入（对局开始后加入为观战）
 
 ## 玩法
 
@@ -112,4 +117,4 @@ node test/simulate.js
 
 ## 路线图建议
 
-联机对战（需后端）→ 选将界面 → 更多技能钩子（摸牌阶段/回合结束/装备特效）→ 卡牌图鉴 → 音效与动画。
+选将界面 → 更多技能钩子（摸牌阶段/回合结束/装备特效）→ 音效与动画 → 联机增强（多房间 / 断线重连回原座位 / 固定网址部署）。

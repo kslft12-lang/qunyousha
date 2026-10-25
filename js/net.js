@@ -18,6 +18,11 @@ QYS.net = {};
     view = v;
     show('lobby');
     hide('startScreen');
+    // GitHub Pages 只能托管静态页面，联机需要 WebSocket 服务器
+    if (location.hostname.endsWith('.github.io')) {
+      lobbyMsg('GitHub Pages 版仅支持单机/演示/图鉴。联机请在本地运行 node server.js（见 README「公网联机部署」），或部署到 Node 托管平台。');
+      return;
+    }
     lobbyMsg('连接中…（需要用 node server.js 启动才能联机）');
     try { ws = new WebSocket(`ws://${location.host}`); } catch { return lobbyMsg('无法建立连接'); }
     ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: String(nick || '') }));
