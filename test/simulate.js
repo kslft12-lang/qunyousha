@@ -302,5 +302,48 @@ async function play(n) {
       if (captured && captured.includes(mo)) throw new Error('凑凑的捣乱狂不应可选魔女');
       console.log('呜呜呜袜改版/隐身/香香的检查 ✓（交牌或无效/单体锦囊不可选/捣乱狂不可选）');
     }
+
+    // 阴暗爬行 / 蟑螂回魂检查
+    {
+      const io11 = over => ({
+        async chooseCard(p, o) { return p.hand.find(c => (o.filter ? o.filter(c) : true) && (!over.card || over.card(c))) || null; },
+        async chooseBool() { return over.bool !== false; },
+        async chooseTargets(p, o) { return o.candidates.slice(0, o.max || 1); },
+        async askPlay() { return { type: 'end' }; }, log() {}, update() {},
+      });
+      const g11 = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 1, names: ['好', '甲', '乙'], ioFor: p => io11(p.seat === 0 ? { card: c => ['sha', 'tao'].includes(QYS.def(c).id) } : { card: () => false }) });
+      const hao = g11.players[0];
+      // 阴暗爬行：手里只有杀，被杀指定时当闪打出
+      hao.skillIds = ['sk_yinpa', 'sk_zhanglang'];
+      hao.hand.length = 0; hao.hand.push({ defId: 'sha', suit: '♠', number: 5 });
+      const dodge1 = await g11.dodgeCheck(hao, 'sha');
+      if (!(dodge1 && hao.hand.length === 0)) throw new Error('阴暗爬行应以杀当闪');
+      // 万箭场合也可用
+      hao.hand.length = 0; hao.hand.push({ defId: 'tao', suit: '♥', number: 4 });
+      const dodge2 = await g11.dodgeCheck(hao, 'wanjian');
+      if (!(dodge2 && hao.hand.length === 0)) throw new Error('阴暗爬行万箭场合应以桃当闪');
+      // 非杀/桃不能转（手里无可用牌）
+      hao.hand.length = 0; hao.hand.push({ defId: 'wuxie', suit: '♠', number: 8 });
+      const dodge3 = await g11.dodgeCheck(hao, 'sha');
+      if (dodge3) throw new Error('无懈不可当闪');
+      // 蟑螂回魂：打至0血无人救 → 回3；第二次死亡 → 真死
+      hao.hand.length = 0;
+      hao.hp = 1;
+      await g11.damage({ source: g11.players[1], target: hao, amount: 1, tag: '杀' });
+      if (!hao.alive || hao.hp !== 3 || !hao.cockroachUsed) throw new Error('蟑螂回魂应回3血并标记已用');
+      hao.hp = 1;
+      await g11.damage({ source: g11.players[1], target: hao, amount: 1, tag: '杀' });
+      if (hao.alive) throw new Error('蟑螂回魂每局一次，第二次应死亡');
+      // 有人出桃救助时不消耗蟑螂
+      const g12 = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 1, names: ['好', '甲', '乙'], ioFor: p => io11(p.seat === 1 ? { card: c => QYS.def(c).id === 'tao' } : { card: () => false }) });
+      const hao2 = g12.players[0], jia2 = g12.players[1];
+      hao2.skillIds = ['sk_zhanglang'];
+      hao2.hand.length = 0;
+      jia2.hand.length = 0; jia2.hand.push({ defId: 'tao', suit: '♥', number: 9 });
+      hao2.hp = 1;
+      await g12.damage({ source: g12.players[2], target: hao2, amount: 1, tag: '杀' });
+      if (!hao2.alive || hao2.cockroachUsed) throw new Error('被桃救起不应消耗蟑螂回魂');
+      console.log('阴暗爬行/蟑螂回魂检查 ✓（杀桃当闪/万箭可用/回魂一次/桃救不消耗）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

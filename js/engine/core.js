@@ -64,6 +64,7 @@ QYS.core = QYS.core || {};
         hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null }, judges: [],
         oranges: 0,          // orange 计数（秋秋人）
         blade: 0,            // 太刀等级 0无 1白刃 2黄刃 3红刃（花生酱酱酱）
+        cockroachUsed: false, // 蟑螂回魂是否已用（好像有一天）
         alive: true, revealed: identity === '主', turn: null, io: null,
       };
       p.io = ioFor ? ioFor(p) : null;
@@ -284,6 +285,20 @@ QYS.core = QYS.core || {};
         }
       }
 
+      // 【阴暗爬行】：可将【杀】或【桃】当作【闪】打出（被杀指定与万箭齐发均可用）
+      if (game.hasSkill(target, 'sk_yinpa')
+        && target.hand.some(c => ['sha', 'tao'].includes(QYS.def(c).id))) {
+        if (await game.askBool(target, '是否发动【阴暗爬行】？将一张【杀】或【桃】当作【闪】打出', { tag: '技能' })) {
+          const card = await game.askCard(target, { filter: c => ['sha', 'tao'].includes(QYS.def(c).id), tag: '技能', hint: '【阴暗爬行】：选择一张【杀】或【桃】当作【闪】打出' });
+          if (card && target.hand.includes(card)) {
+            game.discardFromHand(target, card, '打出');
+            game.log(`${target.name} 发动【阴暗爬行】，将${QYS.cardLabel(card)}当作【闪】打出`, 'skill');
+            game.update();
+            return true;
+          }
+        }
+      }
+
       // 【万人迷】：场上任一其他角色替打【闪】；其无闪则失去1点体力（且本次仍视为未闪避）
       if (game.hasSkill(target, 'sk_wanrenmi')) {
         const cands = game.alive().filter(q => q !== target);
@@ -375,7 +390,17 @@ QYS.core = QYS.core || {};
         }
         if (t.hp > 0) break;
       }
-      if (t.alive && t.hp <= 0) await game.die(t, source);
+      if (t.alive && t.hp <= 0) {
+        // 蟑螂回魂：无人出桃救助时回3血（每局限一次）
+        if (game.hasSkill(t, 'sk_zhanglang') && !t.cockroachUsed) {
+          t.cockroachUsed = true;
+          t.hp = Math.min(t.hp + 3, t.maxHp);
+          game.log(`【蟑螂回魂】${t.name} 是打不死的蟑螂！回复至 ${t.hp} 点体力（每局一次已用）`, 'skill');
+          game.update();
+          if (t.hp > 0) return;
+        }
+        await game.die(t, source);
+      }
     };
 
     const dropAll = p => {

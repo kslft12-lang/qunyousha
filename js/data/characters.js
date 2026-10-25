@@ -60,6 +60,20 @@ QYS.data.skills = {
     desc: '你每使用一次【杀】，太刀永久升级：无→白刃（攻击范围+1）→黄刃（每回合可使用两次【杀】）→红刃（所有【杀】伤害+1）；若你以【杀】杀死一名角色，太刀跌落一个等级。',
   },
 
+  // 【阴暗爬行】：可将【杀】或【桃】当作【闪】使用/打出（被杀指定与万箭齐发场合均可）。实现在 game.dodgeCheck。
+  sk_yinpa: {
+    name: '阴暗爬行',
+    type: 'trigger',
+    desc: '你可以将一张【杀】或【桃】当作【闪】使用或打出。',
+  },
+
+  // 【蟑螂回魂】：体力归零且无人出【桃】救助时，回复3点体力；每局限一次。实现在 game.dying。
+  sk_zhanglang: {
+    name: '蟑螂回魂',
+    type: 'trigger',
+    desc: '锁定技。当你的体力归零且无人出【桃】救助时，你回复3点体力；此技能每局游戏只能触发一次。',
+  },
+
   // 【呜呜呜袜】：受到伤害时，伤害来源二选一：交给魔女一张手牌（无手牌时不可选），或令此伤害无效。
   // 实现在 beforeDamaged 钩子（可改 payload.amount=0 实现伤害无效）。
   sk_wuwuwuwa: {
@@ -316,7 +330,7 @@ QYS.data.characters = [
   // TODO: 路人群友为测试用白板武将（人数超出角色池时以其补位，允许重复）
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
-  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng'] },
+  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng', 'sk_yinpa', 'sk_zhanglang'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
