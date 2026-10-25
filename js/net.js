@@ -24,7 +24,9 @@ QYS.net = {};
       return;
     }
     lobbyMsg('连接中…（需要用 node server.js 启动才能联机）');
-    try { ws = new WebSocket(`ws://${location.host}`); } catch { return lobbyMsg('无法建立连接'); }
+    // https 页面必须用 wss，http（本地）用 ws
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    try { ws = new WebSocket(`${wsProto}//${location.host}`); } catch { return lobbyMsg('无法建立连接'); }
     ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: String(nick || '') }));
     ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch (err) { console.error(err); } };
     ws.onclose = () => lobbyMsg('连接已断开。请确认 node server.js 在运行，刷新页面重试。');
