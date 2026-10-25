@@ -45,4 +45,5 @@
   $('#btnDemo').addEventListener('click', () => start(+$('#playerCount').value, null));
   $('#btnOnline').addEventListener('click', () => QYS.net.openLobby(view));
   $('#btnCodex').addEventListener('click', () => QYS.codex.open());
+  $('#btnHelp').addEventListener('click', () => QYS.codex.open('help'));
 })();

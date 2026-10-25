@@ -420,14 +420,14 @@ QYS.data.characters = [
   // TODO: 路人群友为测试用白板武将（人数超出角色池时以其补位，允许重复）
   { id: 'luren', name: '路人群友', title: '路人', hp: 4, skills: [] },
   // avatar: 头像扩展名（assets/characters/<id>.<avatar>），不填默认 png；正确声明可避免 404 探测造成的头像闪烁
-  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 4, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng', 'sk_yinpa', 'sk_zhanglang'] },
+  { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 5, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng', 'sk_yinpa', 'sk_zhanglang'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'] },
-  { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
+  { id: 'dashen', name: '大神', title: '群友', hp: 5, skills: ['sk_wanrenmi'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
-  { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
+  { id: 'hua00', name: '00的画', title: '群友', hp: 5, avatar: 'png', skills: ['sk_daoluan'] },
   { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
-  { id: 'yanwenzi', name: '颜文字小变态', title: '群友', hp: 4, skills: ['sk_toilet', 'sk_tuokuzi'] },
+  { id: 'yanwenzi', name: '颜文字小变态', title: '群友', hp: 5, skills: ['sk_toilet', 'sk_tuokuzi'] },
   // TODO: 噜噜打汪头像待补 assets/characters/lulu.png（当前显示首字圆徽）
   { id: 'lulu', name: '噜噜打汪', title: '群友', hp: 4, skills: ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'] },
   { id: 'mogu', name: '蘑菇', title: '菌菇召唤师', hp: 4, skills: ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang'] },

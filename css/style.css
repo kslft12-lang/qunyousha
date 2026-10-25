@@ -414,6 +414,9 @@ button { font-family: inherit; cursor: pointer; }
 .codexFace[data-type="delayed"] { border-color: #6a55a0; }
 .codexFace[data-type="equip"] { border-color: #2f6f4f; }
 .codexCardEntry .dDesc { font-size: 12px; line-height: 1.7; color: #d8cdb6; margin-top: 4px; }
+/* 教程 */
+.helpList { margin: 0 0 10px; padding-left: 22px; font-size: 13px; line-height: 2; color: #d8cdb6; }
+.helpList b { color: var(--gold-hi); }
 @media (max-width: 900px) {
   .codexGrid { grid-template-columns: 1fr; }
 }
