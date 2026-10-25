@@ -189,7 +189,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'wuxie', name: '无懈可击', type: 'trick', deckCount: 4, noPlay: true,
+    id: 'wuxie', name: '无懈可击', type: 'trick', deckCount: 6, noPlay: true,
     desc: '一张锦囊牌生效前打出，抵消之。',
   },
 
@@ -248,13 +248,13 @@ QYS.data.cards = [
     desc: '你计算与其他角色的距离-1。',
   },
 
-  // ---- 蘑菇牌（均不进入初始牌堆：金针菇只能由【金针菇】技能置入，其余由【蘑菇生长】生成；用后进弃牌堆、可随弃牌堆洗回）----
+  // ---- 蘑菇牌（金针菇不进牌堆：只能由【金针菇】技能置入、移出不入弃牌堆；其余四张为普通牌堆牌，另可由【蘑菇生长】生成）----
   {
     id: 'jinzhengu', name: '金针菇', type: 'curse', deckCount: 0, noPlay: true,
     desc: '诅咒牌。无法使用、打出或弃置，计入手牌上限；经过你自己的三个回合后自动移出游戏。你被【一起上厕所】选为目标时，其立即移出。只能通过【金针菇】技能进入手牌，移出后不进弃牌堆。',
   },
   {
-    id: 'mehuogu', name: '魅惑菇', type: 'trick', deckCount: 0,
+    id: 'mehuogu', name: '魅惑菇', type: 'trick', deckCount: 3,
     desc: '出牌阶段，对你的攻击范围内的一名其他角色使用：直到其下个回合结束，其无法将你选为【杀】的目标。',
     target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.inShaRange(u, t)) },
     async effect(g, { user, targets, card }) {
@@ -266,7 +266,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'huimiegu', name: '毁灭菇', type: 'trick', deckCount: 0,
+    id: 'huimiegu', name: '毁灭菇', type: 'trick', deckCount: 2,
     desc: '出牌阶段使用：你与相邻的两名角色各受到3点伤害（「蘑菇」无论是否为使用者均免疫此伤害）。',
     async effect(g, { user, card }) {
       const alive = g.alive();
@@ -284,7 +284,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'xingbaogu', name: '杏鲍菇', type: 'trick', deckCount: 0,
+    id: 'xingbaogu', name: '杏鲍菇', type: 'trick', deckCount: 3,
     desc: '出牌阶段对自己使用，回复2点体力。',
     canUse: (g, u) => u.hp < u.maxHp,
     target: { count: 1, candidates: (g, u) => [u] },
@@ -294,7 +294,7 @@ QYS.data.cards = [
     },
   },
   {
-    id: 'houtougu', name: '猴头菇', type: 'trick', deckCount: 0,
+    id: 'houtougu', name: '猴头菇', type: 'trick', deckCount: 3,
     desc: '出牌阶段对自己使用：从基本/锦囊/装备牌中选择一种类型，从牌堆中抽取一张该类型的牌（翻过的牌压回堆底）。',
     target: { count: 1, candidates: (g, u) => [u] },
     async effect(g, { user, card }) {
