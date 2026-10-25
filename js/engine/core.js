@@ -275,10 +275,14 @@ QYS.core = QYS.core || {};
       }
       return false;
     };
+    // 结算一次【杀】：目标闪避成功返回 false；未闪避（造成伤害）返回 true（灌汤包等技能依此判定）
     game.shaResolve = async (source, target, bonus = 0) => {
-      if (!target.alive) return;
-      if (!(await game.dodgeCheck(target)))
+      if (!target.alive) return false;
+      if (!(await game.dodgeCheck(target, 'sha'))) {
         await game.damage({ source, target, amount: 1 + bonus, tag: '杀' });
+        return true;
+      }
+      return false;
     };
 
     game.damage = async ({ source, target, amount = 1, tag }) => {

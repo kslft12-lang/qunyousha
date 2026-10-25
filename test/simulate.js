@@ -88,5 +88,28 @@ async function play(n) {
       if (new Set(g4.players.map(p => p.charId)).size !== 5) throw new Error('5人局角色重复');
       console.log('角色唯一性检查 ✓（仅路人群友可重复补位）');
     }
+
+    // 灌汤包检查：杀次数上限2 / 1血目标无视距离 / 命中摸牌
+    {
+      const g5 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
+      const me = g5.players[0], far = g5.players[2]; // 距离2
+      me.skillIds = ['sk_guantangbao'];
+      me.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
+      const shaDef = QYS.data.cards.find(c => c.id === 'sha');
+      if (!shaDef.canUse(g5, me)) throw new Error('灌汤包第一张杀应可用');
+      me.turn.shaUsed = 1;
+      if (!shaDef.canUse(g5, me)) throw new Error('灌汤包每回合应可用两张杀');
+      me.turn.shaUsed = 2;
+      if (shaDef.canUse(g5, me)) throw new Error('灌汤包第三张杀应不可用');
+      me.equips.weapon = { defId: 'liannu', suit: '♦', number: 1 };
+      if (!shaDef.canUse(g5, me)) throw new Error('连弩仍应无限出杀');
+      me.equips.weapon = null;
+      const noSkillCands = shaDef.target.candidates(g5, me);
+      if (noSkillCands.includes(far)) throw new Error('距离2默认不可选');
+      far.hp = 1;
+      const cands = shaDef.target.candidates(g5, me);
+      if (!cands.includes(far)) throw new Error('灌汤包应无视距离选中1血目标');
+      console.log('灌汤包检查 ✓（两张杀/无视距离/连弩兼容）');
+    }
   }
 })().catch(e => { console.error('模拟失败：', e); process.exit(1); });

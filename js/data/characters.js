@@ -112,6 +112,14 @@ QYS.data.skills = {
     },
   },
 
+  // 【灌汤包】：每回合可用两张【杀】；场上存在 1 血角色时可无视距离对其出【杀】，命中（未被闪）摸一张牌。
+  // 实现在 cards.js 的【杀】（canUse 次数上限 / candidates 距离豁免 / effect 命中摸牌）。
+  sk_guantangbao: {
+    name: '灌汤包',
+    type: 'trigger',
+    desc: '你每回合可以使用两张【杀】；若场上存在体力值为1的角色，你可以无视攻击距离对其使用【杀】，此【杀】未被【闪】抵消时，你摸一张牌。',
+  },
+
   // 【小笼包】：手牌上限-1，摸牌阶段摸牌数+1。实现在 rules.js 的摸牌/弃牌阶段。
   sk_xiaolongbao: {
     name: '小笼包',
@@ -151,6 +159,6 @@ QYS.data.characters = [
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_yijiyiji'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa'] },
   { id: 'dashen', name: '大神', title: '群友', hp: 4, skills: ['sk_wanrenmi'] },
-  { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao'] },
+  { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
   { id: 'hua00', name: '00的画', title: '群友', hp: 4, avatar: 'png', skills: ['sk_daoluan'] },
 ];

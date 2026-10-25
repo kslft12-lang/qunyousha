@@ -23,17 +23,31 @@ QYS.data.cards = [
   // ---- 基本牌 ----
   {
     id: 'sha', name: '杀', type: 'basic', deckCount: 30,
-    desc: '出牌阶段，对你攻击范围内的一名其他角色使用。目标需打出【闪】，否则受到1点伤害。每回合限使用一次（【诸葛连弩】除外）。',
-    target: { count: 1, candidates: (g, u) => g.othersAlive(u).filter(t => g.inShaRange(u, t)) },
+    desc: '出牌阶段，对你攻击范围内的一名其他角色使用。目标需打出【闪】，否则受到1点伤害。每回合限使用一次（【诸葛连弩】与【灌汤包】除外）。',
+    target: {
+      count: 1,
+      candidates: (g, u) => {
+        const base = g.othersAlive(u).filter(t => g.inShaRange(u, t));
+        if (!g.hasSkill(u, 'sk_guantangbao')) return base;
+        // 灌汤包：场上 1 血角色无视距离均可作为目标
+        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t));
+        return [...base, ...extra];
+      },
+    },
     canUse: (g, u) => {
       const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
-      return u.turn.shaUsed === 0 || !!(w && w.unlimitedSha);
+      if (w && w.unlimitedSha) return true;
+      return u.turn.shaUsed < (g.hasSkill(u, 'sk_guantangbao') ? 2 : 1);
     },
     async effect(g, { user, targets }) {
+      const tgt = targets[0];
+      // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸
+      const guantang = g.hasSkill(user, 'sk_guantangbao') && tgt.hp === 1;
       const bonus = user.turn.wine ? 1 : 0;
       user.turn.wine = false;
       user.turn.shaUsed++;
-      await g.shaResolve(user, targets[0], bonus);
+      const hit = await g.shaResolve(user, tgt, bonus);
+      if (guantang && hit) await g.drawCards(user, 1);
     },
   },
   {
