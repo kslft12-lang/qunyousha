@@ -151,7 +151,7 @@ QYS.data.skills = {
         if (!b || !b.length) return;
         const tgt = b[0];
         game.log(`${p.name} 发动【豆沙包】，命令 ${src.name} 对 ${tgt.name} 使用【杀】`, 'skill');
-        const sha = src.hand.find(c => QYS.def(c).id === 'sha');
+        const sha = src.hand.find(c => QYS.isSha(c));
         if (sha) {
           game.discardFromHand(src, sha, '使用');
           game.log(`${src.name} 被迫使用${QYS.cardLabel(sha)}`, 'use');

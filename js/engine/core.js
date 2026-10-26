@@ -15,6 +15,10 @@ QYS.core = QYS.core || {};
     cardLabel: c => `【${QYS.def(c).name}】`,
     util: { colorOf, numStr, shuffle, sleep },
   });
+  // 诅咒牌（金针菇/叫叫叫）：不可弃置、不可交给他人、不可被拆桥顺手拿走
+  QYS.isCurse = c => c.defId === 'jinzhengu' || c.defId === 'jiaojiaojiao';
+  // 视为【杀】的牌：大狗叫拥有【杀】的效果（决斗/南蛮/豆沙包等需要"打出杀"的场合同样可用）
+  QYS.isSha = c => { const d = QYS.def(c); return !!d && (d.id === 'sha' || d.id === 'dagoujiao'); };
 
   const ID_NAME = { 主: '主公', 忠: '忠臣', 反: '反贼', 内: '内奸' };
   // 各人数的身份配置（2 人局即单挑）
@@ -118,8 +122,8 @@ QYS.core = QYS.core || {};
     game.anyCards = p => p.hand.length > 0 || p.judges.length > 0 || Object.values(p.equips).some(Boolean);
     game.randomZoneCard = p => {
       const zones = [];
-      // 金针菇诅咒无法被弃置/获得（拆桥/顺手等随机指定跳过之）
-      const handPick = p.hand.filter(c => c.defId !== 'jinzhengu');
+      // 诅咒牌无法被弃置/获得（拆桥/顺手等随机指定跳过之）
+      const handPick = p.hand.filter(c => !QYS.isCurse(c));
       if (handPick.length) zones.push({ zone: 'hand', cards: handPick });
       for (const [slot, c] of Object.entries(p.equips)) if (c) zones.push({ zone: 'equip', slot });
       p.judges.forEach((c, i) => zones.push({ zone: 'judge', index: i }));
@@ -202,16 +206,12 @@ QYS.core = QYS.core || {};
         game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges})`, 'skill');
         return false;
       }
-      // 【大狗叫】：抽到的杀自动转换为大狗叫
+      // 【大狗叫】：抽到的杀自动转换为大狗叫（原地改牌面，保留花色点数，牌堆总数不变）
       if (game.hasSkill(p, 'sk_dagoujiao') && c.defId === 'sha') {
-        const newCard = {
-          defId: 'dagoujiao',
-          suit: c.suit,
-          number: c.number,
-        };
-        p.hand.push(newCard);
+        c.defId = 'dagoujiao';
+        p.hand.push(c);
         game.log(`${p.name} 的【大狗叫】触发：抽到的【杀】已转换为【大狗叫】`, 'skill');
-        return false;
+        return true;
       }
       p.hand.push(c);
       return true;
@@ -268,13 +268,13 @@ QYS.core = QYS.core || {};
         const asked = QYS.data.cards.find(c => c.name === opts.tag);
         if (asked && asked.id !== 'sha' && asked.id !== 'shan') return null;
       }
-      // 金针菇诅咒：任何选牌（使用/打出/交给）一律不可选中
+      // 诅咒牌：任何选牌（使用/打出/交给）一律不可选中
       const inner = opts.filter;
       const card = await p.io.chooseCard(p, {
         ...opts,
-        filter: c => c.defId !== 'jinzhengu' && (!inner || inner(c)),
+        filter: c => !QYS.isCurse(c) && (!inner || inner(c)),
       });
-      if (card && card.defId === 'jinzhengu') return null; // 双保险（联机客户端不可信）
+      if (card && QYS.isCurse(card)) return null; // 双保险（联机客户端不可信）
       // 梯子专家：本回合被盯上的角色使用任意卡牌有一半概率失败（弃牌不受影响）
       if (card && p.ladderFail && opts.tag !== '弃牌' && Math.random() < 0.5) {
         game.log(`${p.name} 的卡牌因【梯子专家】造成的网络波动而使用失败`, 'skill');
@@ -296,7 +296,9 @@ QYS.core = QYS.core || {};
       return p.io.chooseTargets(p, opts);
     };
     game.askResponse = (p, name, hint) => game.askCard(p, {
-      filter: c => QYS.def(c).name === name, tag: name,
+      // 【大狗叫】拥有【杀】的效果：需要"打出杀"时同样可以打出
+      filter: name === '杀' ? c => QYS.isSha(c) : c => QYS.def(c).name === name,
+      tag: name,
       hint: hint || `请打出【${name}】`, cancelText: '放弃',
     });
 
@@ -362,9 +364,9 @@ QYS.core = QYS.core || {};
 
       // 【阴暗爬行】：可将【杀】或【桃】当作【闪】打出（被杀指定与万箭齐发均可用）
       if (game.hasSkill(target, 'sk_yinpa')
-        && target.hand.some(c => ['sha', 'tao'].includes(QYS.def(c).id))) {
+        && target.hand.some(c => QYS.isSha(c) || QYS.def(c).id === 'tao')) {
         if (await game.askBool(target, '是否发动【阴暗爬行】？将一张【杀】或【桃】当作【闪】打出', { tag: '技能' })) {
-          const card = await game.askCard(target, { filter: c => ['sha', 'tao'].includes(QYS.def(c).id), tag: '技能', hint: '【阴暗爬行】：选择一张【杀】或【桃】当作【闪】打出' });
+          const card = await game.askCard(target, { filter: c => QYS.isSha(c) || QYS.def(c).id === 'tao', tag: '技能', hint: '【阴暗爬行】：选择一张【杀】或【桃】当作【闪】打出' });
           if (card && target.hand.includes(card)) {
             game.discardFromHand(target, card, '打出');
             game.log(`${target.name} 发动【阴暗爬行】，将${QYS.cardLabel(card)}当作【闪】打出`, 'skill');
@@ -623,6 +625,8 @@ QYS.core = QYS.core || {};
       over: game.over, winner: game.winner, phase: game.phase,
       currentIdx: game.currentIdx, turnCount: game.turnCount,
       playDeadline: game.playDeadline ?? null,
+      // 剩余毫秒：联机客户端时钟可能与服务器不一致，用剩余时长换算成本地死线
+      playRemainMs: game.playDeadline ? Math.max(0, game.playDeadline - Date.now()) : null,
       deckCount: game.deck.length,
       logs: game.logs.slice(0, 60),
       discardEntries: game.discard.slice().reverse().map(c => {

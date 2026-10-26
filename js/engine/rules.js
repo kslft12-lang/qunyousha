@@ -21,8 +21,8 @@ QYS.rules = {};
   // 某张牌在出牌阶段能否被使用，以及合法目标
   QYS.rules.playInfo = function (game, p, card) {
     const d = def(card);
-    // 小学生战争：被锁玩家只能使用【杀】（闪本身不可主动使用）
-    if (game.isLocked(p) && d.id !== 'sha') return { ok: false, targets: [] };
+    // 小学生战争：被锁玩家只能使用【杀】（闪本身不可主动使用）；大狗叫拥有杀的效果，同样放行
+    if (game.isLocked(p) && d.id !== 'sha' && d.id !== 'dagoujiao') return { ok: false, targets: [] };
     if (d.noPlay) return { ok: false, targets: [] };
     // 无膝盖之人：无法装备坐骑
     if (d.type === 'equip' && (d.slot === 'horsePlus' || d.slot === 'horseMinus') && game.hasSkill(p, 'sk_wuxigai'))
@@ -101,7 +101,12 @@ QYS.rules = {};
       return;
     }
     await d.effect(game, { user, targets, card });
-    game.toDiscard(card, user, '使用');
+    if (d.vanish) {
+      // 大狗叫/叫叫叫：一次性神卡，用完移出游戏（不进弃牌堆，避免洗回牌堆后被随机摸到）
+      game.log(`${QYS.cardLabel(card)}使用后移出游戏`, 'system');
+    } else {
+      game.toDiscard(card, user, '使用');
+    }
     game.update();
   }
 
@@ -186,12 +191,12 @@ QYS.rules = {};
     let limit = game.hasSkill(p, 'sk_xiaolongbao') ? Math.max(0, p.hp - 1) : p.hp;
     if (game.hasSkill(p, 'sk_chudong')) limit += 1;
     while (!game.over && p.alive && p.hand.length > limit) {
-      // 金针菇诅咒无法弃置：只剩诅咒时只能保留超限
-      const normal = p.hand.filter(c => c.defId !== 'jinzhengu');
-      if (!normal.length) { game.log(`${p.name} 的手牌全是【金针菇】，无法弃置`, 'system'); break; }
+      // 诅咒牌无法弃置：只剩诅咒时只能保留超限
+      const normal = p.hand.filter(c => !QYS.isCurse(c));
+      if (!normal.length) { game.log(`${p.name} 的手牌全是诅咒牌，无法弃置`, 'system'); break; }
       const c = await game.askCard(p, {
-        filter: x => x.defId !== 'jinzhengu', tag: '弃牌',
-        hint: `弃牌阶段：请弃置手牌（上限 ${limit}，还需 ${p.hand.length - limit} 张；【金针菇】无法弃置）`, cancelText: '随机弃一张',
+        filter: x => !QYS.isCurse(x), tag: '弃牌',
+        hint: `弃牌阶段：请弃置手牌（上限 ${limit}，还需 ${p.hand.length - limit} 张；诅咒牌无法弃置）`, cancelText: '随机弃一张',
       });
       if (c && p.hand.includes(c)) {
         game.discardFromHand(p, c);

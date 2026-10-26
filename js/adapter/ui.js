@@ -30,7 +30,9 @@ QYS.ui.create = function (root) {
   const ID_CLS = { 主: 'lord', 忠: 'loyal', 反: 'rebel', 内: 'spy' };
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
 
-  const view = { game: null, state: null, splashResolve: null, pinnedKey: null, discExpanded: false };
+  const view = { game: null, state: null, splashResolve: null, pinnedKey: null, hoverKey: null, discExpanded: false };
+  // 武将牌实测尺寸（含间距余量），供椭圆布局用；首帧用估算值，之后按实际渲染结果更新
+  let cw = 180, ch = 188;
   // 触屏（无悬浮）：浏览器点按会先合成 mouseover——若照常弹卡牌详情，抽屉会盖住操作区/目标，点按被吞。
   // 触屏改为"点按固定查看"：不可用/未选中态点手牌、点技能标签 → 固定详情；再点其他位置取消。
   const isTouch = !!(window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches);
@@ -134,8 +136,8 @@ QYS.ui.create = function (root) {
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
       <div class="avWrap">${avatarHtml(p)}${orgBadge}${bladeIcon}</div>
       <div class="pinfo">
-        <div class="pname"><span class="pnum">${num}号</span>${p.name}${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
-        <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>
+        <div class="pname"><span class="pnum">${num}号</span><span class="pnm">${p.name}</span></div>
+        <div class="ptitle"><span class="ptt">${ch ? `${ch.name} · ${ch.title}` : p.title}</span>${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
         <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${inLiugou ? '<span class="chip liugouChip">遛狗去咯</span>' : ''}${distGuarded ? '<span class="chip guardChip">保卫胡萝卜</span>' : ''}${charmed ? '<span class="chip charmChip">魅惑菇</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
@@ -152,7 +154,8 @@ QYS.ui.create = function (root) {
     const d = QYS.def(card);
     const red = colorOf(card.suit) === 'red';
     const artCls = d.art ? ` art${d.art}` : '';
-    const face = d.img ? `<img class="face" src="assets/cards/${d.id}.png" alt="">` : '';
+    // onerror 移除自己：卡面图缺失时退回纯文字卡面，不留破图图标
+    const face = d.img ? `<img class="face" src="assets/cards/${d.id}.png" alt="" onerror="this.remove()">` : '';
     return `<div class="card mini${artCls} ${red ? 'redSuit' : 'blackSuit'} ${extra}" data-defid="${card.defId}" data-suit="${card.suit}" data-num="${card.number}" ${attrs}>
       ${face}<div class="corner">${numStr(card.number)}<br>${card.suit}</div>
       <div class="cname">${d.name}</div>
@@ -214,16 +217,21 @@ QYS.ui.create = function (root) {
     const n = Math.max(alivePs.length, 1);
     const idx = new Map(alivePs.map((p, i) => [p, i]));
     const anchorIdx = idx.has(anchor) ? idx.get(anchor) : 0;
-    // 椭圆半径按容器实测尺寸自适应（每张武将牌按 CW×CH 占位）：
+    // 椭圆半径按容器实测尺寸自适应（每张武将牌按实际宽高占位，大屏放大后自动跟着变大）：
     // 保证顶部/左右边缘的武将牌完整显示不被裁切；cy=46% 让视觉重心略偏上，给底部手牌区让位
     const box = ring.getBoundingClientRect();
-    const CY = 46, CW = 178, CH = 176;
+    const probe = ring.querySelector('.player');
+    if (probe) { // 用上一帧渲染出的武将牌实测尺寸，避免硬编码在缩放断点下失准
+      const r = probe.getBoundingClientRect();
+      if (r.width > 0) { cw = r.width + 12; ch = r.height + 10; }
+    }
+    const CY = 46;
     let rx = 40, ry = 33;
     if (box.width > 120 && box.height > 120) {
-      rx = Math.max(30, Math.min(46, (box.width - CW - 16) / (2 * box.width) * 100));
-      ry = Math.max(22, Math.min(44, Math.min(
-        (CY / 100 * box.height - CH / 2 - 8) / box.height,
-        ((100 - CY) / 100 * box.height - CH / 2 - 8) / box.height) * 100));
+      rx = Math.max(30, Math.min(46, (box.width - cw - 16) / (2 * box.width) * 100));
+      ry = Math.max(22, Math.min(46, Math.min(
+        (CY / 100 * box.height - ch / 2 - 8) / box.height,
+        ((100 - CY) / 100 * box.height - ch / 2 - 8) / box.height) * 100));
     }
     const pos = p => {
       const rel = ((idx.get(p) ?? anchorIdx) - anchorIdx + n) % n;
@@ -258,7 +266,7 @@ QYS.ui.create = function (root) {
     const me = g.humanSeat != null ? g.players[g.humanSeat] : null;
     if (me) {
       const hand = me.alive
-        ? me.hand.map((c, i) => handCardHtml(me, c, i)).join('')
+        ? `<div class="handFan">${me.hand.map((c, i) => handCardHtml(me, c, i)).join('')}</div>`
         : '<div class="spectate">你已阵亡，观战中</div>';
       selfArea.innerHTML = `<div id="handRow">${hand}</div>`;
     } else {
@@ -266,7 +274,11 @@ QYS.ui.create = function (root) {
     }
 
     actionBar.innerHTML = actionBarHtml();
+    // 战报：只在原本贴顶时跟随新消息；玩家往下翻看历史时保留滚动位置，不被重渲染拉回顶部
+    const logAtTop = logList.scrollTop <= 2;
+    const logScroll = logList.scrollTop;
     logList.innerHTML = g.logs.map(l => `<div class="logline ${l.type}">${l.text}</div>`).join('');
+    logList.scrollTop = logAtTop ? 0 : logScroll;
   }
 
   // ---- 问答（Promise 化的人类玩家接口）----
@@ -282,6 +294,13 @@ QYS.ui.create = function (root) {
     r(v);
   }
 
+  // 出牌倒计时只约束"轮到人类自己的出牌阶段"；别人回合里被问的问题（万人迷/无懈等）不带死线
+  function humanPlayDeadline() {
+    const g = view.game;
+    if (!g || g.humanSeat == null || g.phase !== '出牌') return null;
+    return g.currentIdx === g.humanSeat ? (g.playDeadline ?? null) : null;
+  }
+
   view.io = {
     async chooseCard(p, opts) {
       return ask('chooseCard', { filter: opts.filter || (() => true), hint: opts.hint || '', cancelText: opts.cancelText });
@@ -290,14 +309,14 @@ QYS.ui.create = function (root) {
       return ask('play', {
         playableKeys: new Set(opts.playable.map(it => cardKey(it.card))),
         canSkill: opts.canSkill, skillName: opts.skillName, hint: opts.hint || '',
-        deadline: view.game?.playDeadline ?? null, // 出牌倒计时到期时自动"结束出牌"
+        deadline: humanPlayDeadline(), // 出牌倒计时到期时自动"结束出牌"
       });
     },
     async chooseTargets(p, opts) {
       return ask('targets', {
         candidates: opts.candidates, selected: [],
         min: opts.min ?? 1, max: opts.max ?? 1, hint: opts.hint || '',
-        deadline: view.game?.phase === '出牌' ? (view.game.playDeadline ?? null) : null, // 仅出牌阶段内的选目标受倒计时约束
+        deadline: humanPlayDeadline(), // 自己出牌阶段内选目标同样受倒计时约束
       });
     },
     async chooseBool(p, opts) {
@@ -331,7 +350,7 @@ QYS.ui.create = function (root) {
     }
   }
 
-  function handleCardClick(i) {
+  function handleCardClick(i, el) {
     const g = view.game;
     if (g.humanSeat == null) return;
     const card = g.players[g.humanSeat].hand[i];
@@ -339,18 +358,45 @@ QYS.ui.create = function (root) {
     if (!card || !st) return;
     if (st.mode === 'play' && st.playableKeys.has(cardKey(card))) resolveSt({ type: 'card', card });
     else if ((st?.mode === 'chooseCard') && st.filter(card)) resolveSt(card);
-    else if (isTouch) pinCardDetail(card); // 触屏点了当前不可用的手牌：固定查看这张牌的说明
+    else if (isTouch) pinCardDetail(card, el); // 触屏点了当前不可用的手牌：固定查看这张牌的说明
   }
 
-  // 固定展示一张手牌的详情（触屏信息入口）
-  function pinCardDetail(card) {
+  // 详情浮层定位：桌面端跟随悬停的卡牌/技能标签，贴其右侧（空间不足翻到左侧），并夹在视口内；
+  // 触屏走 CSS 顶部固定抽屉，不设内联定位（内联样式会盖掉媒体查询）
+  function showDetail(el, html, pinned = false) {
+    cardDetail.innerHTML = html + (pinned ? '<div class="pinNote">已固定 · 点其他位置取消</div>' : '');
+    cardDetail.hidden = false;
+    cardDetail.style.left = cardDetail.style.top = cardDetail.style.bottom = 'auto';
+    if (isTouch) { cardDetail.style.left = cardDetail.style.top = cardDetail.style.bottom = ''; return; }
+    const r = el.getBoundingClientRect();
+    const w = cardDetail.offsetWidth, h = cardDetail.offsetHeight;
+    if (el.closest('#handRow')) {
+      // 手牌：详情浮在手牌正上方（贴边时夹进视口），不去遮挡邻近手牌
+      let x = r.left + r.width / 2 - w / 2;
+      x = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+      let y = r.top - h - 10;
+      if (y < 8) y = Math.min(window.innerHeight - h - 8, r.bottom + 10); // 上方空间不足 → 放下面
+      cardDetail.style.left = `${x}px`;
+      cardDetail.style.top = `${Math.max(8, y)}px`;
+      return;
+    }
+    let x = r.right + 12;
+    if (x + w > window.innerWidth - 8) x = r.left - 12 - w;   // 右侧放不下 → 放左边
+    x = Math.max(8, Math.min(x, window.innerWidth - w - 8));  // 两边都放不下 → 夹进视口
+    let y = r.top + r.height / 2 - h / 2;
+    y = Math.max(8, Math.min(y, window.innerHeight - h - 8));
+    cardDetail.style.left = `${x}px`;
+    cardDetail.style.top = `${y}px`;
+  }
+
+  // 固定展示一张手牌的详情（触屏信息入口 / 弃牌堆点按）；el 用真实元素以便定位
+  function pinCardDetail(card, el) {
     const tmp = document.createElement('div');
     tmp.dataset.defid = card.defId; tmp.dataset.suit = card.suit; tmp.dataset.num = card.number;
     const html = detailHtml(tmp);
     if (!html) return;
     view.pinnedKey = 'hand:' + cardKey(card);
-    cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
-    cardDetail.hidden = false;
+    showDetail(el || tmp, html, true);
   }
 
   function handleSeatClick(seat) {
@@ -382,7 +428,7 @@ QYS.ui.create = function (root) {
       } else {
         view.pinnedKey = key;
         const html = detailHtml(discCard);
-        if (html) { cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>'; cardDetail.hidden = false; }
+        if (html) showDetail(discCard, html, true);
       }
       return;
     }
@@ -393,23 +439,21 @@ QYS.ui.create = function (root) {
         const html = detailHtml(skEl);
         if (html) {
           view.pinnedKey = detailKey(skEl);
-          cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
-          cardDetail.hidden = false;
+          showDetail(skEl, html, true);
         }
       }
       return;
     }
-    if (view.pinnedKey) { view.pinnedKey = null; cardDetail.hidden = true; }
+    if (view.pinnedKey) { view.pinnedKey = null; view.hoverKey = null; cardDetail.hidden = true; }
     const cardEl = e.target.closest('[data-card-idx]');
-    if (cardEl) { handleCardClick(+cardEl.dataset.cardIdx); return; }
+    if (cardEl) { handleCardClick(+cardEl.dataset.cardIdx, cardEl); return; }
     // 触屏：点装备/判定区悬挂牌 → 固定查看其效果（桌面用悬浮；不再冒泡成选人）
     const hangEl = e.target.closest('.card.hang');
     if (hangEl && isTouch) {
       const html = detailHtml(hangEl);
       if (html) {
         view.pinnedKey = detailKey(hangEl);
-        cardDetail.innerHTML = html + '<div class="pinNote">已固定 · 点其他位置取消</div>';
-        cardDetail.hidden = false;
+        showDetail(hangEl, html, true);
       }
       return;
     }
@@ -443,11 +487,13 @@ QYS.ui.create = function (root) {
     if (isTouch) return; // 触屏无悬浮：详情走点按固定，合成 mouseover 一律忽略
     if (view.pinnedKey) return; // 已固定详情时忽略悬浮
     const el = e.target.closest('[data-defid],[data-skill]');
-    if (!el) { cardDetail.hidden = true; return; }
+    if (!el) { cardDetail.hidden = true; view.hoverKey = null; return; }
+    const key = detailKey(el);
+    if (key === view.hoverKey) return; // 同一张牌内移动：不重设内容，避免图片闪烁/滚动丢失
     const html = detailHtml(el);
-    if (!html) { cardDetail.hidden = true; return; }
-    cardDetail.innerHTML = html;
-    cardDetail.hidden = false;
+    if (!html) { cardDetail.hidden = true; view.hoverKey = null; return; }
+    view.hoverKey = key;
+    showDetail(el, html);
   });
 
   // 窗口尺寸变化后重算椭圆布局；只看宽度变化——手机浏览器地址栏伸缩只改高度，
@@ -482,12 +528,15 @@ QYS.ui.create = function (root) {
   view.attach = (g, remote = false) => {
     view.game = g;
     if (!remote) g.view = view;
+    // 联机快照里的 playDeadline 是服务器时钟；换算成本地死线，避免两端时钟偏差导致倒计时错乱
+    if (remote && g.playRemainMs != null) g.playDeadline = Date.now() + g.playRemainMs;
     // 联机（remote）状态快照会频繁到达，弃牌堆展开/详情固定不在此重置（换局时由 net 层调 resetPanels）
     if (!remote) view.resetPanels();
     gameScreen.hidden = false;
   };
   view.resetPanels = () => {
     view.pinnedKey = null;
+    view.hoverKey = null;
     view.discExpanded = false;
     cardDetail.hidden = true;
   };

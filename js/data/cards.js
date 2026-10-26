@@ -320,32 +320,33 @@ QYS.data.cards = [
     id: 'jinzhengu', name: '金针菇', type: 'curse', deckCount: 0, noPlay: true, art: 'curse',
     desc: '诅咒牌。无法使用、打出或弃置，计入手牌上限；经过你自己的三个回合后自动移出游戏。你被【一起上厕所】选为目标时，其立即移出。只能通过【金针菇】技能进入手牌，移出后不进弃牌堆。',
   },
-  // ---- 诅咒牌：叫叫叫（类似金针菇，持有者抽牌数-1，使用效果不同）----
+  // ---- 诅咒牌：叫叫叫（持有时抽牌数-1；可主动使用以摆脱，代价是弃一张牌并失去1点体力）----
   {
-    id: 'jiaojiaojiao', name: '叫叫叫', type: 'curse', deckCount: 0, noPlay: true,
-    desc: '诅咒牌。无法丢弃，持有时抽牌数减一。使用时需弃置一张牌并失去一滴血。只能通过大神的技能获取。',
-    canUse: (g, u) => u.hand.some(c => c.defId !== 'jiaojiaojiao'), // 必须有一张非叫叫叫的牌
-    async effect(g, { user, card }) {
-      // 先弃置一张牌
-      const discardCandidate = user.hand.find(c => c.defId !== 'jiaojiaojiao');
-      if (!discardCandidate) return;
-      const c = await g.askCard(user, { 
-        filter: card => card.defId !== 'jiaojiaojiao', 
-        tag: '弃牌', 
-        hint: '【叫叫叫】：必须弃置一张非叫叫叫的手牌',
-        cancelText: '随机弃一张'
+    // vanish：使用后直接移出游戏，不进弃牌堆（否则会被洗回牌堆，从此任何人都可能摸到）
+    id: 'jiaojiaojiao', name: '叫叫叫', type: 'curse', deckCount: 0, art: 'curse', vanish: true,
+    desc: '诅咒牌。无法丢弃、无法被拿走，持有时抽牌数减一。你可以在出牌阶段使用它：弃置一张其他手牌并失去1点体力，将此牌移出游戏。只能通过【大狗叫】命中获得。',
+    canUse: (g, u) => u.hand.some(c => c.defId !== 'jiaojiaojiao'), // 手里要有别的牌可弃
+    async effect(g, { user }) {
+      // 先弃置一张非叫叫叫的手牌（没有其他手牌时 canUse 已挡住，此处双保险）
+      const others = user.hand.filter(c => c.defId !== 'jiaojiaojiao');
+      if (!others.length) return;
+      const c = await g.askCard(user, {
+        filter: card => card.defId !== 'jiaojiaojiao',
+        tag: '弃牌',
+        hint: '【叫叫叫】：弃置一张其他手牌',
+        cancelText: '随机弃一张',
       });
-      const toDiscard = c && user.hand.includes(c) ? c : discardCandidate;
+      const toDiscard = c && user.hand.includes(c) ? c : others[(Math.random() * others.length) | 0];
       g.discardFromHand(user, toDiscard, '弃置');
-      g.log(`${user.name} 发动【叫叫叫】，弃置了${QYS.cardLabel(toDiscard)}`, 'use');
-      // 失去一滴血
+      g.log(`${user.name} 使用【叫叫叫】，弃置了${QYS.cardLabel(toDiscard)}`, 'use');
       await g.loseHp(user, 1, '叫叫叫');
     },
   },
 
   // ---- 基本牌：大狗叫（大神专用）----
   {
-    id: 'dagoujiao', name: '大狗叫', type: 'basic', deckCount: 0, img: true,
+    // vanish：使用后移出游戏，不进弃牌堆（牌堆洗回时不会混进普通牌）
+    id: 'dagoujiao', name: '大狗叫', type: 'basic', deckCount: 0, vanish: true,
     desc: '基本牌，只能通过大神的技能获取。效果与【杀】相同，并且当此牌未被【闪】抵消时，往目标手牌加入一张【叫叫叫】。',
     target: {
       count: 1,

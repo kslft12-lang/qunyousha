@@ -15,6 +15,18 @@
   --skill: #b08cd9;
   --display: "KaiTi", "STKaiti", "楷体", "SimSun", serif;
   --body: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  /* 桌面尺寸变量：大屏按断点放大武将牌/头像/手牌，手机端由末尾媒体查询覆盖 */
+  --mini-w: 64px;  --mini-h: 90px;   /* 手牌尺寸 */
+  --pl-w: 168px;                      /* 武将牌宽度 */
+  --av: 52px;                         /* 头像直径 */
+  --hand-h: calc(var(--mini-h) + 22px); /* 底部手牌区总高（卡高 + 上下内边距） */
+}
+
+@media (min-width: 1600px) {
+  :root { --mini-w: 76px; --mini-h: 106px; --pl-w: 200px; --av: 56px; }
+}
+@media (min-width: 2100px) {
+  :root { --mini-w: 86px; --mini-h: 120px; --pl-w: 226px; --av: 64px; }
 }
 
 * { box-sizing: border-box; margin: 0; }
@@ -84,7 +96,7 @@ button { font-family: inherit; cursor: pointer; }
 #gameScreen {
   height: 100vh;
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr clamp(280px, 21vw, 380px);
   grid-template-rows: 1fr auto;
   grid-template-areas: "table log" "action log";
 }
@@ -111,8 +123,8 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* ---------- 玩家面板 ---------- */
-/* 玩家围成一圈：预留下方约 118px 给自己的手牌区 */
-#ring { position: absolute; inset: 0 0 118px 0; }
+/* 玩家围成一圈：下方按手牌区实际高度留白（大屏手牌更大，留白随变量走） */
+#ring { position: absolute; inset: 0 0 var(--hand-h) 0; }
 .player.ringP {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -121,7 +133,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .player.ringP.current { z-index: 4; }
 .player {
-  width: 168px;
+  width: var(--pl-w);
   display: flex; flex-wrap: wrap; gap: 10px;
   padding: 10px;
   background: #10291fd9;
@@ -134,7 +146,7 @@ button { font-family: inherit; cursor: pointer; }
 .player.selected { border-color: var(--red); border-style: solid; box-shadow: 0 0 10px #c23b2e66; }
 .player.dead { filter: grayscale(1); opacity: .45; }
 /* 7~8 人局：环上武将牌紧凑化（ui.js 在 ring 上加 .crowd） */
-#ring.crowd .player { width: 152px; padding: 8px; gap: 8px; }
+#ring.crowd .player { width: calc(var(--pl-w) - 16px); padding: 8px; gap: 8px; }
 #ring.crowd .avatar { width: 40px; height: 40px; font-size: 20px; }
 #ring.crowd .pname { font-size: 15px; }
 #ring.crowd .ptitle { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -146,13 +158,13 @@ button { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .player.selectable { animation: none; } }
 
 .avatar {
-  width: 52px; height: 52px; flex: none;
+  width: var(--av); height: var(--av); flex: none;
   border-radius: 50%;
   border: 2px solid var(--gold);
   background: linear-gradient(135deg, #2e4a3b, #17281f);
   position: relative;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--display); font-size: 26px; color: var(--gold-hi);
+  font-family: var(--display); font-size: calc(var(--av) / 2); color: var(--gold-hi);
 }
 .avatar::before { content: attr(data-initial); }
 .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
@@ -185,8 +197,13 @@ button { font-family: inherit; cursor: pointer; }
 .bladeIcon.b3 { color: #ff5a4a; border-color: #c23b2e; }
 
 .pinfo { min-width: 0; flex: 1; }
-.pname { font-family: var(--display); font-size: 17px; display: flex; align-items: center; gap: 6px; }
-.ptitle { font-size: 11px; color: var(--dim); margin-top: 1px; }
+/* 姓名独占一行：过长时省略号（身份徽章下移到副标题行），避免"机器/人3"这种断字 */
+.pname { font-family: var(--display); font-size: 17px; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.pnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pname .pnum { flex: none; }
+.ptitle { font-size: 11px; color: var(--dim); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.ptt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptitle .badge { width: 16px; height: 16px; font-size: 10px; flex: none; }
 .hp { margin-top: 4px; font-size: 13px; letter-spacing: 1px; }
 .hpFull { color: var(--hp); }
 .hpEmpty { color: #55665c; }
@@ -261,15 +278,29 @@ button { font-family: inherit; cursor: pointer; }
 #selfArea {
   position: absolute; left: 0; right: 0; bottom: 0;
   display: flex; justify-content: center;
-  padding: 6px 12px 10px;
+  padding: 2px 12px 10px;
   z-index: 5;
 }
+/* 手牌单行排列：牌多时横向滚动，不再换行向上盖住牌桌与武将牌
+   .handFan 用 margin:0 auto 居中；内容超宽时 auto 归零，保证能从第一张开始滚 */
 #handRow {
-  flex: 1;
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
-  gap: 8px;
-  min-height: 96px;
+  flex: 1; min-width: 0;
+  display: flex; align-items: flex-end;
+  overflow-x: auto; overflow-y: hidden;
+  min-height: calc(var(--mini-h) + 10px);
+  scrollbar-width: thin;
+  scrollbar-color: #3d5c4c transparent;
 }
+#handRow::-webkit-scrollbar { height: 6px; }
+#handRow::-webkit-scrollbar-thumb { background: #3d5c4c; border-radius: 3px; }
+#handRow::-webkit-scrollbar-thumb:hover { background: #5a7d6a; }
+#handRow::-webkit-scrollbar-track { background: transparent; }
+.handFan {
+  display: flex; align-items: flex-end; gap: 8px;
+  margin: 0 auto;
+  padding: 10px 2px 0; /* 顶部 10px：留出悬停上浮（-8px）不被 overflow 裁掉 */
+}
+#handRow > .spectate { margin: 0 auto; }
 .spectate { color: var(--dim); padding: 30px; letter-spacing: .3em; }
 
 .card {
@@ -280,18 +311,18 @@ button { font-family: inherit; cursor: pointer; }
   color: #232833;
   user-select: none;
 }
-.card.mini { width: 64px; height: 90px; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.card.mini { width: var(--mini-w); height: var(--mini-h); flex: none; cursor: pointer; transition: transform .15s, box-shadow .15s; }
 .card.mini:hover { transform: translateY(-8px); box-shadow: 0 6px 14px #00000066; }
 .card.mini.playable { box-shadow: 0 0 0 2px var(--gold), 0 0 10px #c9a22777; }
 /* 卡面底图（cards 数据 img: true）：铺满卡面，牌名/花色叠加其上 */
 .card .face { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 6px; object-fit: cover; }
 .card .face ~ .corner { text-shadow: 0 0 3px #fff, 0 0 2px #fff, 0 1px 2px #00000055; }
 .card:has(.face) .cname { text-shadow: 0 0 4px #ffffffd0, 0 1px 3px #000000aa; }
-.card .corner { position: absolute; top: 4px; left: 6px; font-size: 12px; line-height: 1.1; font-weight: bold; }
+.card .corner { position: absolute; top: 4px; left: 6px; font-size: calc(var(--mini-w) * .19); line-height: 1.1; font-weight: bold; }
 .card .cname {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--display); font-size: 20px;
+  font-family: var(--display); font-size: calc(var(--mini-w) * .31);
   writing-mode: vertical-rl; letter-spacing: 6px;
 }
 .redSuit { color: var(--red); }
@@ -304,7 +335,10 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--gold); letter-spacing: .8em; font-size: 16px;
   border-bottom: 1px solid #4a321f;
 }
-#logList { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 12px; line-height: 1.8; }
+#logList { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 12px; line-height: 1.8; scrollbar-width: thin; scrollbar-color: #4a321f transparent; }
+#logList::-webkit-scrollbar { width: 8px; }
+#logList::-webkit-scrollbar-thumb { background: #4a321f; border-radius: 4px; }
+#logList::-webkit-scrollbar-thumb:hover { background: #6a4a2f; }
 .logline.system { color: var(--dim); }
 .logline.use { color: #e3d3a3; }
 .logline.damage { color: #e88a7d; }
@@ -316,6 +350,7 @@ button { font-family: inherit; cursor: pointer; }
 #cardDetail {
   position: fixed; left: 16px; bottom: 130px;
   width: 216px; z-index: 40;
+  max-height: calc(100vh - 16px); overflow-y: auto;
   background: var(--wood);
   border: 1px solid var(--gold); border-radius: 10px;
   padding: 12px;
@@ -446,7 +481,7 @@ button { font-family: inherit; cursor: pointer; }
 .chip.fallenChip { border-color: #55665c; color: #9db1a5; background: #0d1a14; opacity: .75; }
 .chip.statChip { border-color: var(--gold); color: var(--gold-hi); background: #10291fd9; font-size: 12px; padding: 2px 10px; }
 #discardCorner {
-  position: absolute; right: 12px; bottom: 116px;
+  position: absolute; right: 12px; bottom: calc(var(--hand-h) + 4px);
   max-width: 44%; z-index: 4;
   background: #10291fd9; border: 1px solid #3d5c4c; border-radius: 10px;
   padding: 8px 10px;
@@ -579,11 +614,30 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ================= 响应式（置于文件末尾以覆盖上文所有规则） ================= */
 
+/* 大屏（电脑 2K/4K）：武将牌与手牌已由 :root 变量放大，这里同时放大文字，避免空洞感 */
+@media (min-width: 1600px) {
+  .pname { font-size: 19px; }
+  .ptitle { font-size: 12px; }
+  .hp { font-size: 14px; }
+  .handcount { font-size: 13px; }
+  .chip { font-size: 11px; padding: 1px 7px; }
+  #turnInfo { font-size: 15px; }
+  #turnInfo b { font-size: 17px; }
+  #prompt { font-size: 17px; }
+  #playClock { font-size: 15px; }
+  #logList { font-size: 13px; }
+  .logTitle { font-size: 18px; }
+  #cardDetail { width: 260px; }
+  #cardDetail .dDesc { font-size: 13px; }
+  #discardCorner .dcTitle { font-size: 12px; }
+  .card.disc { width: 54px; height: 76px; }
+}
+
 /* 平板窄屏：保留椭圆环，仅收窄武将牌 */
 @media (max-width: 900px) {
+  :root { --pl-w: 148px; }
   #gameScreen { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; grid-template-areas: "table" "action" "log"; }
   #logPanel { border-left: none; border-top: 1px solid #4a321f; max-height: 150px; }
-  .player { width: 148px; }
 }
 
 /* 触屏：无悬浮，卡牌/技能详情改为顶部固定抽屉（点按固定、再点取消）——置于顶部，避免盖住手牌区与确定/取消按钮 */
@@ -597,6 +651,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* 手机竖屏 / 矮窗口：放弃椭圆环，武将牌改紧凑网格，避免头像互相压叠 */
 @media (max-width: 700px), (max-height: 620px) {
+  :root { --mini-w: 56px; --mini-h: 78px; --av: 40px; --pl-w: 148px; }
   #startScreen h1 { font-size: clamp(44px, 14vw, 72px); }
   #seal { display: none; }
 
@@ -610,7 +665,7 @@ button { font-family: inherit; cursor: pointer; }
     overflow-y: auto; -webkit-overflow-scrolling: touch;
     display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 8px; align-content: start;
-    padding: 4px 8px 118px; /* 底部留出手牌区，末行不被遮挡 */
+    padding: 4px 8px calc(var(--hand-h) + 6px); /* 底部留出手牌区，末行不被遮挡 */
   }
   .player.ringP {
     position: static !important; left: auto !important; top: auto !important;
@@ -625,12 +680,11 @@ button { font-family: inherit; cursor: pointer; }
   #ring .card.hang { width: 30px; height: 42px; }
   #ring .card.hang .cname { font-size: 10px; }
 
-  #discardCorner { right: 8px; bottom: 110px; max-width: 88vw; }
-  #selfArea { padding: 4px 8px calc(8px + env(safe-area-inset-bottom)); z-index: 6; }
-  #handRow { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; min-height: 86px; }
-  #handRow .card.mini { width: 56px; height: 78px; flex: none; }
-  #handRow .card.mini .corner { font-size: 10px; }
-  #handRow .card.mini .cname { font-size: 15px; letter-spacing: 3px; }
+  #discardCorner { right: 8px; bottom: calc(var(--hand-h) + 2px); max-width: 88vw; }
+  #selfArea { padding: 0 8px calc(6px + env(safe-area-inset-bottom)); z-index: 6; }
+  #handRow { min-height: var(--mini-h); }
+  #handRow .card.mini { flex: none; }
+  #handRow .card.mini .cname { letter-spacing: 3px; }
 
   #actionBar { padding: 6px; gap: 8px; flex-wrap: wrap; }
   .btn { padding: 8px 16px; font-size: 14px; }

@@ -34,7 +34,7 @@ QYS.bot = { fast: false }; // fast=true 时关闭思考延迟（Node 模拟测�
         const it = find(d => d.id === 'tao')
           || find(d => d.id === 'wuzhong')
           || find(d => d.type === 'equip')
-          || find(d => d.id === 'sha')
+          || playable.find(x => QYS.isSha(x.card)) // 杀与大狗叫（大神）
           || playable[(Math.random() * playable.length) | 0];
         return it ? { type: 'card', card: it.card } : { type: 'end' };
       },
