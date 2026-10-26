@@ -130,5 +130,46 @@ const DAJIAN = { defId: 'dajian', suit: '♠', number: 2 };
     if (p0.charge !== 0) throw new Error('非斯坦尊尊装备大剑不应蓄力');
     console.log('大剑·专属限制 ✓');
   }
+  // ===== 排查修复：太刀代打闪也摸牌（万人迷指定花生酱酱酱） =====
+  {
+    const g = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['花', '大', '乙'], ioFor: () => mkIo({ bool: true, card: c => QYS.def(c).id === 'shan' }) });
+    const [hs, ds] = g.players;
+    hs.skillIds = ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'];
+    ds.skillIds = ['sk_wanrenmi'];
+    hs.hand.length = 0; hs.hand.push({ defId: 'shan', suit: '♦', number: 2 });
+    hs.equips.weapon = { ...TAIDAO };
+    ds.hand.length = 0;
+    const deckB = g.deck.length;
+    await g.dodgeCheck(ds, 'sha', null); // 大神被杀，万人迷指定花生酱酱酱代打
+    if (hs.hand.length !== 1 || g.deck.length !== deckB - 1) throw new Error('太刀代打闪应摸一张');
+    console.log('排查修复·太刀代打 ✓');
+  }
+  // ===== 排查修复：臭鸡炸炸炸不可转移 =====
+  {
+    const g = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['鸽', '甲', '乙'], ioFor: () => mkIo({}) });
+    const pg = g.players[0];
+    pg.charId = 'cougezi'; pg.skillIds = ['sk_jiaoxiang', 'sk_wenzhe', 'sk_chouji'];
+    g.players.slice(1).forEach(q => { q.skillIds = []; q.hand.length = 0; });
+    pg.hand.length = 0; pg.hand.push({ defId: 'choujizhazha', suit: '♠', number: 1 });
+    const pick = g.randomZoneCard(pg);
+    if (pick) throw new Error('拆桥/顺手不应能拿走臭鸡炸炸炸（无其他区域时）');
+    pg.hand.push({ defId: 'shan', suit: '♦', number: 2 });
+    const pick2 = g.randomZoneCard(pg);
+    if (pick2.card.defId !== 'shan') throw new Error('有普通牌时应只选普通牌');
+    console.log('排查修复·臭鸡不可转移 ✓');
+  }
+  // ===== 排查修复：凑鸽子阵亡时臭鸡炸炸炸移出游戏 =====
+  {
+    const g = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['鸽', '甲', '乙'], ioFor: () => mkIo({}) });
+    const pg = g.players[0], jia = g.players[1];
+    pg.charId = 'cougezi'; pg.skillIds = ['sk_jiaoxiang', 'sk_wenzhe', 'sk_chouji'];
+    g.players.slice(1).forEach(q => { q.skillIds = []; q.hand.length = 0; });
+    pg.hand.length = 0; pg.hand.push({ defId: 'choujizhazha', suit: '♠', number: 1 });
+    pg.hp = 1;
+    await g.damage({ source: jia, target: pg, amount: 2, tag: '杀' });
+    if (pg.alive) throw new Error('凑鸽子应阵亡');
+    if (g.discard.some(c => c.defId === 'choujizhazha') || g.deck.some(c => c.defId === 'choujizhazha')) throw new Error('阵亡后臭鸡炸炸炸应移出游戏');
+    console.log('排查修复·阵亡移出 ✓');
+  }
   console.log('\n太刀/大剑专项测试全部通过 ✓');
 })().catch(e => { console.error('失败:', e); process.exit(1); });

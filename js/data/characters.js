@@ -87,7 +87,7 @@ QYS.data.skills = {
         if (!src || !src.alive || src === p) return;
         if (src.hand.length && await game.askBool(src, `${p.name} 的【呜呜呜袜】：交给她一张手牌？（拒绝则此伤害无效）`, { tag: '技能' })) {
           const c = await game.askCard(src, { filter: () => true, tag: '弃牌', hint: '【呜呜呜袜】：交给对方一张手牌', cancelText: '随机交一张' });
-          const giveables = src.hand.filter(x => x.defId !== 'jinzhengu'); // 金针菇无法交给他人
+          const giveables = src.hand.filter(x => !QYS.nonTransferable(x)); // 诅咒牌与臭鸡炸炸炸无法交给他人
           const give = c && src.hand.includes(c) ? c : giveables[(Math.random() * giveables.length) | 0];
           if (!give) { // 手牌全是金针菇：无从可交，视为拒绝
             payload.amount = 0;
@@ -291,7 +291,7 @@ QYS.data.skills = {
         const t = sel[0];
         if (t.hand.length && await game.askBool(t, `被 ${p.name} 的【梯子专家】盯上：交给他一张手牌？（拒绝则本回合你使用卡牌有一半概率失败）`, { tag: '技能' })) {
           const c = await game.askCard(t, { filter: () => true, tag: '弃牌', hint: `【梯子专家】：交给 ${p.name} 一张手牌`, cancelText: '随机交一张' });
-          const giveables = t.hand.filter(x => x.defId !== 'jinzhengu'); // 金针菇无法交给他人
+          const giveables = t.hand.filter(x => !QYS.nonTransferable(x)); // 诅咒牌与臭鸡炸炸炸无法交给他人
           const give = c && t.hand.includes(c) ? c : giveables[(Math.random() * giveables.length) | 0];
           if (give) {
             t.hand.splice(t.hand.indexOf(give), 1);

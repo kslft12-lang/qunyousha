@@ -17,6 +17,8 @@ QYS.core = QYS.core || {};
   });
   // 诅咒牌（金针菇/叫叫叫）：不可弃置、不可交给他人、不可被拆桥顺手拿走
   QYS.isCurse = c => c.defId === 'jinzhengu' || c.defId === 'jiaojiaojiao';
+  // 不可转移牌：诅咒牌 + 臭鸡炸炸炸（只可被凑鸽子持有使用，拆桥/顺手/交牌等一律绕开）
+  QYS.nonTransferable = c => QYS.isCurse(c) || c.defId === 'choujizhazha';
   // 视为【杀】的牌：大狗叫拥有【杀】的效果（决斗/南蛮/豆沙包等需要"打出杀"的场合同样可用）
   QYS.isSha = c => { const d = QYS.def(c); return !!d && (d.id === 'sha' || d.id === 'dagoujiao'); };
 
@@ -126,8 +128,8 @@ QYS.core = QYS.core || {};
     game.anyCards = p => p.hand.length > 0 || p.judges.length > 0 || Object.values(p.equips).some(Boolean);
     game.randomZoneCard = p => {
       const zones = [];
-      // 诅咒牌无法被弃置/获得（拆桥/顺手等随机指定跳过之）
-      const handPick = p.hand.filter(c => !QYS.isCurse(c));
+      // 诅咒牌与臭鸡炸炸炸无法被弃置/获得（拆桥/顺手等随机指定跳过之）
+      const handPick = p.hand.filter(c => !QYS.nonTransferable(c));
       if (handPick.length) zones.push({ zone: 'hand', cards: handPick });
       for (const [slot, c] of Object.entries(p.equips)) if (c) zones.push({ zone: 'equip', slot });
       p.judges.forEach((c, i) => zones.push({ zone: 'judge', index: i }));
@@ -413,6 +415,7 @@ QYS.core = QYS.core || {};
             if (helperShan && helper.hand.includes(helperShan)) {
               game.discardFromHand(helper, helperShan, '打出');
               game.log(`${helper.name} 替 ${target.name} 打出了【闪】`, 'use');
+              await taidaoDraw(helper); // 太刀：代打也是打出【闪】
               game.update();
               return true;
             }
@@ -615,10 +618,10 @@ QYS.core = QYS.core || {};
 
     const dropAll = p => {
       game.voidAllCurse(p); // 金针菇诅咒随阵亡移出游戏，不进弃牌堆
-      // 大狗叫/叫叫叫（vanish）同样移出游戏：进弃牌堆会被洗回牌堆，从此被人随机摸到
+      // 大狗叫/叫叫叫（vanish）随阵亡移出；臭鸡炸炸炸同理——持有者死后无人可用，留在牌堆只会无限弹回浪费抽牌
       const hand = p.hand.splice(0);
       for (const c of hand) {
-        if (QYS.def(c)?.vanish) {
+        if (QYS.def(c)?.vanish || c.defId === 'choujizhazha') {
           game.log(`${QYS.cardLabel(c)}随阵亡移出游戏`, 'system');
           continue;
         }
