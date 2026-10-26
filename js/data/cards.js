@@ -346,7 +346,7 @@ QYS.data.cards = [
   // ---- 基本牌：大狗叫（大神专用）----
   {
     id: 'dagoujiao', name: '大狗叫', type: 'basic', deckCount: 0, img: true,
-    desc: '基本牌，只能通过大神的技能获取。效果与【杀】相同，并且当此牌未被【闪】抵消时，往目标手牌加入一张【大狗叫】。',
+    desc: '基本牌，只能通过大神的技能获取。效果与【杀】相同，并且当此牌未被【闪】抵消时，往目标手牌加入一张【叫叫叫】。',
     target: {
       count: 1,
       // 方天画戟：此【大狗叫】为最后一张手牌时可指定至多 3 名目标
@@ -392,13 +392,13 @@ QYS.data.cards = [
         const dodged = !(await g.shaResolve(user, tgt, base + guding, card));
         if (!dodged) {
           anyHit = true;
-          // 大狗叫额外效果：未被闪时往对方手牌增加一张大狗叫
+          // 大狗叫额外效果：未被闪时往对方手牌增加一张【叫叫叫】诅咒牌
           tgt.hand.push({
-            defId: 'dagoujiao',
+            defId: 'jiaojiaojiao',
             suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0],
             number: 1 + ((Math.random() * 13) | 0),
           });
-          g.log(`${tgt.name} 被【大狗叫】命中，手牌中被塞入一张【大狗叫】`, 'skill');
+          g.log(`${tgt.name} 被【大狗叫】命中，手牌中被塞入一张【叫叫叫】`, 'skill');
         }
       }
       if (guantang && anyHit) await g.drawCards(user, 1);
