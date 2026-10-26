@@ -58,7 +58,7 @@ async function waitHttpReady() {
 const diag = { step: '启动服务器', clients: {} };
 
 (async () => {
-  server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js'), String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js'), String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SMOKE_FAST: '1' } });
   server.serverLogs = [];
   const grab = tag => d => { const s = d.toString(); server.serverLogs.push(s); if (process.env.SMOKE_VERBOSE) process.stderr.write('[server] ' + s); };
   server.stdout.on('data', grab('out'));
@@ -91,10 +91,14 @@ const diag = { step: '启动服务器', clients: {} };
   if (helloB.seat !== 1) throw new Error('第二位加入者应为 1 号位');
   console.log('建房/加入/错误处理 ✓');
 
-  // ---- 2. 开局：快照隐私 ----
-  A.send({ t: 'start', playerCount: 2 });
+  // ---- 2. 开局：快照隐私 + 角色池（只给花生酱酱酱 → 另一玩家补路人群友） ----
+  A.send({ t: 'start', playerCount: 2, chars: ['hsjjj'] });
   const stA = await A.wait(m => m.t === 'state' && m.snap.gameId === 1 && m.snap.players.length === 2);
   const stB = await B.wait(m => m.t === 'state' && m.snap.gameId === 1);
+  const charIds = stA.snap.players.map(p => p.charId);
+  if (!charIds.every(id => id === 'hsjjj' || id === 'luren')) throw new Error('角色池未生效: ' + charIds.join(','));
+  if (!charIds.includes('luren')) throw new Error('池中唯一角色不足时应以路人群友补位');
+  if (new Set(charIds.filter(id => id !== 'luren')).size !== charIds.filter(id => id !== 'luren').length) throw new Error('唯一性角色不应重复');
   if (!Array.isArray(stA.snap.players[0].hand) || stA.snap.players[0].hand.length !== 4) throw new Error('甲应看到自己 4 张起手牌');
   if (stA.snap.players[1].hand !== undefined) throw new Error('甲不应看到乙的手牌');
   if (stB.snap.players[0].hand !== undefined) throw new Error('乙不应看到甲的手牌');
@@ -159,7 +163,22 @@ const diag = { step: '启动服务器', clients: {} };
   console.log('断线即时接管 ✓（turnCount ' + before + ' → ' + (advanced.over ? '终局' : advanced.turnCount) + '，耗时 ' + (Date.now() - t0) + 'ms）');
 
   pumping = false;
-  A.close(); C.close(); bgPump.catch(() => {});
+  A.close(); bgPump.catch(() => {});
+
+  // ---- 6. 终局 rematch：房主（A 断开后转移给 C）一键再开一局，沿用人数与角色池 ----
+  diag.step = '6.终局rematch';
+  const stOver = await C.wait(m => m.t === 'state' && m.snap.over, 120000);
+  const beforeGameId = stOver.snap.gameId;
+  // 旧房主 A 已离场，房主应已转移给剩余最小座位（C）
+  const lobbyAfter = await C.wait(m => m.t === 'lobby' && !m.started, 5000);
+  C.send({ t: 'rematch' });
+  const st2 = await C.wait(m => m.t === 'state' && m.snap.gameId > beforeGameId && !m.snap.over, 10000)
+    .catch(() => null);
+  if (!st2) throw new Error('房主 rematch 应重开一局');
+  const ids2 = st2.snap.players.map(p => p.charId);
+  if (!ids2.every(id => id === 'hsjjj' || id === 'luren')) throw new Error('rematch 应沿用本局角色池: ' + ids2.join(','));
+  console.log('终局 rematch + 角色池沿用 ✓（房主已转移至原观战者）');
+  C.close();
   console.log('\n冒烟测试全部通过 ✓');
 })().catch(e => {
   console.error('冒烟测试失败：', e);

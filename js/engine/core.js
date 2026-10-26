@@ -42,7 +42,7 @@ QYS.core = QYS.core || {};
     return shuffle(deck);
   }
 
-  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, lordSeat = 0, names, ioFor } = {}) {
+  QYS.core.createGame = function ({ playerCount = 5, humanSeat = 0, lordSeat = 0, names, ioFor, charPool } = {}) {
     const game = {};
     // 主公坐 lordSeat（抢主公的结算结果），其余身份随机分配
     lordSeat = ((lordSeat % playerCount) + playerCount) % playerCount;
@@ -55,8 +55,9 @@ QYS.core = QYS.core || {};
     game.lordSeat = lordSeat;
     game.identityCounts = { 主: 0, 忠: 0, 反: 0, 内: 0 };
     finalIds.forEach(id => { game.identityCounts[id]++; });
-    // 角色分配：除路人群友外每局不重复；人数超出角色池时以路人群友补位
-    const uniqueChars = shuffle(QYS.data.characters.filter(c => c.id !== 'luren'));
+    // 角色分配：从角色池（charPool 未指定/为空 = 全员池）中不重复随机；人数超出池时以路人群友补位
+    const pool = Array.isArray(charPool) && charPool.length ? charPool : null;
+    const uniqueChars = shuffle(QYS.data.characters.filter(c => c.id !== 'luren' && (!pool || pool.includes(c.id))));
     const luren = QYS.data.characters.find(c => c.id === 'luren');
     const chars = Array.from({ length: playerCount }, (_, s) => uniqueChars[s] || luren);
 

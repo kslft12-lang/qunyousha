@@ -8,6 +8,9 @@ QYS.net = {};
 (function () {
   let ws = null, mySeat = null, roomCode = null, splashDone = false, overShown = false, view = null;
   let lastGameId = null;
+  let hostSeat = null;          // 最近一次大厅广播的房主座位（终局按钮据此区分房主/成员）
+  let leftAfterOver = false;    // 终局后点了"回到主页面"：忽略迟到的旧局快照，避免牌局面板再次弹出
+  let onlinePicker = null;      // 联机角色池选择器（房主；只建一次，选择跨大厅广播保留）
   const askQueue = [];
   let busy = false;
 
@@ -66,6 +69,7 @@ QYS.net = {};
 
   function renderLobby(msg) {
     if (msg.started && !view.game) { hide('lobby'); return; } // 对局进行中才加入的观战者，直接看牌局
+    hostSeat = msg.hostSeat;
     document.getElementById('lobbyCodeText').textContent = msg.code;
     const rushSeats = msg.rushSeats || [];
     const seats = document.getElementById('lobbySeats');
@@ -77,8 +81,13 @@ QYS.net = {};
       return `<div class="lobbySeat${i === mySeat ? ' me' : ''}"><span class="avatar lobbyAv" data-initial="${(n || '机')[0]}"></span>座位 ${i + 1} · ${n || '机器人'}${tag}${rush}${toggle}</div>`;
     }).join('');
     document.getElementById('lobbyOpts').hidden = !(mySeat === msg.hostSeat && !msg.started);
+    // 房主开局选项：角色池选择器只建一次，选择跨大厅刷新保留
+    const poolEl = document.getElementById('charPoolOnline');
+    if (mySeat === msg.hostSeat && !msg.started) {
+      if (!onlinePicker && poolEl) onlinePicker = QYS.ui.buildCharPicker(poolEl);
+    }
     lobbyMsg(mySeat === msg.hostSeat && !msg.started
-      ? '你是房主：勾选「抢主公」后点「开始联机对局」，抢者中随机定主公'
+      ? '你是房主：勾选「抢主公」、点选本局角色池后开始联机对局（全不选 = 默认全员池）'
       : '等待房主开局…可勾选「抢主公」参与争夺');
   }
 
@@ -88,16 +97,23 @@ QYS.net = {};
       lastGameId = snap.gameId;
       overShown = false;
       splashDone = false;
+      leftAfterOver = false;
       view.game = null;
       if (view.resetPanels) view.resetPanels();
     }
+    // 终局后已选择回到主页面：忽略旧局的终局快照，不把牌局弹回来
+    if (leftAfterOver && snap.over) return;
     const first = !view.game;
     view.attach(snap, true);
     hide('startScreen');
     hide('lobby');
     view.render(); // 状态变化即重绘，非回合玩家也能实时看到牌局
     if (snap.over) {
-      if (!overShown) { overShown = true; view.showGameOver(snap); }
+      if (!overShown) {
+        overShown = true;
+        // 联机终局：房主决定继续一局/回到主页面；成员等待
+        view.showGameOver(snap, { waiting: mySeat !== hostSeat });
+      }
       return;
     }
     if (first) {
@@ -178,8 +194,19 @@ QYS.net = {};
         ws.send(JSON.stringify({ t: 'rush', on: e.target.checked }));
     });
     document.getElementById('btnOnlineStart')?.addEventListener('click', () => {
-      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'start', playerCount: +document.getElementById('onlineCount').value }));
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'start', playerCount: +document.getElementById('onlineCount').value, chars: onlinePicker ? onlinePicker.getSelected() : null }));
     });
+    // 终局双按钮（房主）：继续一局沿用本局人数与角色池；回到主页面返回大厅
+    if (view) view.onGameOverAction = act => {
+      if (act === 'rematch') {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'rematch' }));
+      } else {
+        leftAfterOver = true;
+        view.game = null;
+        if (view.hideGameScreen) view.hideGameScreen();
+        show('lobby');
+      }
+    };
     document.getElementById('btnLobbyBack')?.addEventListener('click', () => {
       leaveRoom();
       hide('lobby');

@@ -22,6 +22,29 @@ QYS.charAvatar = function (ch, cls = '') {
   return `<div class="avatar ${cls}" data-initial="${(ch?.name || '?').slice(0, 1)}"><img src="assets/characters/${ch.id}.${ext}" alt="" data-ai="${exts.indexOf(ext)}" data-cid="${ch.id}" onerror="QYS.avatarNext(this)"></div>`;
 };
 
+// 通用角色池选择器：往 container 里渲染除路人群友外的全部角色芯片（点击切换选中态）。
+// 返回 { getSelected() }；一个都没选时 getSelected() 返回 null（= 不限制，全员池）。
+QYS.ui.buildCharPicker = function (container) {
+  const chars = QYS.data.characters.filter(c => c.id !== 'luren');
+  const picked = new Set(chars.map(c => c.id)); // 默认全选
+  container.classList.add('charPick');
+  container.innerHTML = `<div class="cpHead"><span class="cpTitle">本局角色池</span><span class="cpTip">点击头像加入/移出；全不选 = 不限制（默认全员）</span><button class="btn cpAll" type="button">全选</button><button class="btn cpNone" type="button">全不选</button></div>`
+    + `<div class="cpGrid">${chars.map(c => `
+      <div class="cp${picked.has(c.id) ? ' on' : ''}" data-cid="${c.id}" title="${c.name} · ${c.title}">
+        <span class="avatar cpAv" data-initial="${c.name.slice(0, 1)}"><img src="assets/characters/${c.id}.${c.avatar || 'png'}" alt="" data-ai="0" data-cid="${c.id}" onerror="QYS.avatarNext(this)"></span>
+        <span class="cpName">${c.name}</span>
+      </div>`).join('')}</div>`;
+  container.addEventListener('click', e => {
+    const all = e.target.closest('.cpAll'), none = e.target.closest('.cpNone'), chip = e.target.closest('.cp[data-cid]');
+    if (all) { chars.forEach(c => picked.add(c.id)); }
+    else if (none) { picked.clear(); }
+    else if (chip) { const id = chip.dataset.cid; picked.has(id) ? picked.delete(id) : picked.add(id); }
+    else return;
+    container.querySelectorAll('.cp[data-cid]').forEach(el => el.classList.toggle('on', picked.has(el.dataset.cid)));
+  });
+  return { getSelected: () => picked.size ? [...picked] : null };
+};
+
 QYS.ui.create = function (root) {
   const { colorOf, numStr } = QYS.util;
   const ID_NAME = QYS.core.ID_NAME;
@@ -373,6 +396,11 @@ QYS.ui.create = function (root) {
       return;
     }
     if (act === 'restart') { location.reload(); return; }
+    // 终局双按钮：继续一局 / 回到主页面——交给宿主（main 本地 / net 联机）处理
+    if (act === 'rematch' || act === 'home') {
+      if (view.onGameOverAction) view.onGameOverAction(act);
+      return;
+    }
     const st = view.state;
     if (!st) return;
     if (st.mode === 'play') {
@@ -579,6 +607,8 @@ QYS.ui.create = function (root) {
     view.discExpanded = false;
     cardDetail.hidden = true;
   };
+  // 终局"回到主页面"用：隐藏整块牌局（overlay 含于 gameScreen 内一并隐藏）
+  view.hideGameScreen = () => { gameScreen.hidden = true; };
 
   view.showSplash = g => {
     const me = g.players[g.humanSeat];
@@ -599,13 +629,17 @@ QYS.ui.create = function (root) {
     return new Promise(res => { view.splashResolve = res; });
   };
 
-  view.showGameOver = g => {
+  view.showGameOver = (g, opts = {}) => {
     const rows = g.players.map(p =>
       `<tr><td>${p.name}</td><td>${ID_NAME[p.identity]}</td><td>${p.alive ? '存活' : '阵亡'}</td><td>${p.seat === g.humanSeat ? '你' : ''}</td></tr>`).join('');
+    // 终局操作：本地/联机房主 → 继续一局 + 回到主页面；联机非房主 → 等待房主决定
+    const actions = opts.waiting
+      ? '<div class="waitTip">本局已结束 · 等待房主选择继续一局或回到主页面…</div>'
+      : '<div class="overBtns"><button class="btn primary" data-act="rematch">继续一局</button><button class="btn" data-act="home">回到主页面</button></div>';
     overlay.innerHTML = `<div class="panel">
       <h1 class="winTitle">${g.winner === '平局' || !g.winner ? '平局' : g.winner + ' 获胜'}</h1>
       <table class="idTable"><tr><th>武将</th><th>身份</th><th>状态</th><th></th></tr>${rows}</table>
-      <button class="btn primary" data-act="restart">再来一局</button>
+      ${actions}
     </div>`;
     overlay.hidden = false;
   };

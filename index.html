@@ -20,6 +20,7 @@
     </label>
     <label class="field">昵称 <input id="nickName" maxlength="8" placeholder="联机时显示"></label>
     <label class="field chk"><input type="checkbox" id="rushLord" checked> 抢主公（勾选者参与争夺，随机定主公；无人抢则随机）</label>
+    <div id="charPoolLocal"></div>
     <div class="btns">
       <button id="btnStart" class="btn primary">开始游戏</button>
       <button id="btnDemo" class="btn">全机器人演示</button>
@@ -48,6 +49,7 @@
           <option>6</option><option>7</option><option>8</option>
         </select>
       </label>
+      <div id="charPoolOnline"></div>
       <button id="btnOnlineStart" class="btn primary">开始联机对局</button>
     </div>
     <p id="lobbyMsg" class="tip">创建房间，或用房主给的 4 位房间码加入；同一房间昵称不能重复</p>

@@ -17,6 +17,9 @@ const ROOT = __dirname;
 for (const f of ['js/data/characters.js', 'js/data/cards.js', 'js/engine/core.js', 'js/engine/rules.js', 'js/adapter/bot.js'])
   vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
 
+// 冒烟测试用：SMOKE_FAST=1 时机器人秒答（否则整局机器人对局要跑几分钟）
+if (process.env.SMOKE_FAST) QYS.bot.fast = true;
+
 // ---- 极简 WebSocket（RFC6455 文本帧）----
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const acceptKey = key => crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
@@ -46,7 +49,7 @@ function parseFrames(conn, onText) {
     let payload = buf.subarray(off, off + len);
     if (mask) { payload = Buffer.from(payload); for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4]; }
     conn.buf = buf.subarray(off + len);
-    if (op === 0x8) { conn.alive = false; conn.socket.end(); return; }   // close
+    if (op === 0x8) { conn.alive = false; conn.socket.end(); conn.onClose?.(); return; }   // close 帧也走断线清理（TCP close 事件可能不触发）
     if (op === 0x9) { wsSendRaw(conn.socket, 0xA, payload); continue; }  // ping -> pong
     if (op === 0xA) continue;                                            // pong
     if (op === 0x1) onText(conn, payload.toString('utf8'));              // text（假设不分片）
@@ -196,9 +199,10 @@ function defaultAnswer(method, args) {
   return null; // chooseCard→放弃 / bool→否 / askPlay→结束
 }
 
-function startGame(room, playerCount) {
+function startGame(room, playerCount, charPool) {
   room.started = true;
   room.playerCount = playerCount;
+  if (charPool !== undefined) room.charPool = Array.isArray(charPool) ? charPool.filter(id => typeof id === 'string' && id !== 'luren') : null;
   room.disconnected.clear();
   room.gameSeq++;
   // 抢主公结算：抢者中随机定主公；没人抢则全员随机
@@ -220,6 +224,7 @@ function startGame(room, playerCount) {
     humanSeat: null,
     lordSeat,
     names,
+    charPool: room.charPool,
     ioFor: p => (seatConn[p.seat] && !room.disconnected.has(p.seat)) ? netIoFor(room, seatConn[p.seat], p.seat) : QYS.bot.io(),
   });
   room.game.view = { render: () => broadcastStates(room) };
@@ -275,7 +280,14 @@ function onMessage(conn, str) {
     if (!room) return;
     if (room.conns.get(conn) !== room.hostSeat) return;
     if (room.game && !room.game.over) return;
-    startGame(room, Math.max(2, Math.min(8, Number(msg.playerCount) || 5)));
+    startGame(room, Math.max(2, Math.min(8, Number(msg.playerCount) || 5)), Array.isArray(msg.chars) ? msg.chars : undefined);
+  } else if (msg.t === 'rematch') {
+    // 终局后房主一键再开一局：沿用本局人数与角色池
+    const room = roomOf(conn);
+    if (!room) return;
+    if (room.conns.get(conn) !== room.hostSeat) return;
+    if (!room.game || !room.game.over) return;
+    startGame(room, room.playerCount, room.charPool);
   } else if (msg.t === 'rush') {
     const room = roomOf(conn);
     if (!room) return;
@@ -326,6 +338,7 @@ function onConnection(conn) {
       broadcastLobby(room);
     }
   };
+  conn.onClose = cleanup; // WS 关闭帧路径（parseFrames）也会调用
   conn.socket.on('close', cleanup);
   conn.socket.on('error', cleanup);
 }

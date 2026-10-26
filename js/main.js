@@ -3,8 +3,10 @@
   const $ = s => document.querySelector(s);
   const view = QYS.ui.create($('#gameRoot'));
   let game = null;
+  let last = { count: 5, seat: 0, pool: null }; // 上一局设置：终局"继续一局"沿用
 
-  function start(playerCount, humanSeat) {
+  function start(playerCount, humanSeat, charPool) {
+    last = { count: playerCount, seat: humanSeat, pool: charPool || null };
     // 抢主公结算：人类勾选则参与，机器人各 50% 概率参抢；抢者随机定主公，无人抢则随机
     let lordSeat;
     if (humanSeat != null && $('#rushLord').checked) {
@@ -25,6 +27,7 @@
       humanSeat,
       lordSeat,
       names,
+      charPool,
       ioFor: p => (p.seat === humanSeat ? view.io : QYS.bot.io()),
     });
     view.attach(game);
@@ -34,15 +37,27 @@
       if (humanSeat != null) await view.showSplash(game);
       else game.log('全机器人演示开始', 'system');
       await QYS.rules.run(game);
-      await view.showGameOver(game);
+      await view.showGameOver(game, { local: humanSeat != null });
     })().catch(err => {
       console.error(err);
       view.fatal(err);
     });
   }
 
-  $('#btnStart').addEventListener('click', () => start(+$('#playerCount').value, 0));
-  $('#btnDemo').addEventListener('click', () => start(+$('#playerCount').value, null));
+  // 本地角色池选择器（全不选 = 不限制，默认全员池）
+  const localPicker = QYS.ui.buildCharPicker(document.getElementById('charPoolLocal'));
+
+  // 终局双按钮：继续一局沿用上局人数与角色池；回到主页面返回开始界面
+  view.onGameOverAction = act => {
+    if (act === 'rematch') start(last.count, last.seat, localPicker.getSelected());
+    else {
+      view.hideGameScreen();
+      $('#startScreen').hidden = false;
+    }
+  };
+
+  $('#btnStart').addEventListener('click', () => start(+$('#playerCount').value, 0, localPicker.getSelected()));
+  $('#btnDemo').addEventListener('click', () => start(+$('#playerCount').value, null, localPicker.getSelected()));
   $('#btnOnline').addEventListener('click', () => QYS.net.openLobby(view));
   $('#btnCodex').addEventListener('click', () => QYS.codex.open());
   $('#btnHelp').addEventListener('click', () => QYS.codex.open('help'));

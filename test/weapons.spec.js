@@ -82,9 +82,9 @@ const DAJIAN = { defId: 'dajian', suit: '♠', number: 2 };
     const g = QYS.core.createGame({ playerCount: 3, humanSeat: null, lordSeat: 0, names: ['花', '甲', '乙'], ioFor: () => mkIo({}) });
     const [hs, jia] = g.players;
     hs.skillIds = ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'];
-    jia.skillIds = [];
+    g.players.slice(1).forEach(q => { q.skillIds = []; q.hand.length = 0; }); // 钉死+清空起手牌：防止随机桃救人干扰"杀敌"断言
     hs.blade = 3; // 红刃
-    jia.hand.length = 0; jia.hp = 1; jia.identity = '反';
+    jia.hp = 1; jia.identity = '反';
     // 无太刀：杀敌掉级
     const shaDef = QYS.data.cards.find(c => c.id === 'sha');
     hs.turn = { shaUsed: 0, wine: false, skipPlay: false, skipDraw: false, skillUsed: false };
@@ -164,6 +164,7 @@ const DAJIAN = { defId: 'dajian', suit: '♠', number: 2 };
     const pg = g.players[0], jia = g.players[1];
     pg.charId = 'cougezi'; pg.skillIds = ['sk_jiaoxiang', 'sk_wenzhe', 'sk_chouji'];
     g.players.slice(1).forEach(q => { q.skillIds = []; q.hand.length = 0; });
+    g.deck = g.deck.filter(c => c.defId !== 'choujizhazha'); // 排除随机凑鸽子开局洗入的臭鸡（本测试自行投放）
     pg.hand.length = 0; pg.hand.push({ defId: 'choujizhazha', suit: '♠', number: 1 });
     pg.hp = 1;
     await g.damage({ source: jia, target: pg, amount: 2, tag: '杀' });
