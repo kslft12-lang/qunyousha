@@ -21,6 +21,18 @@ QYS.net = {};
   // 点「联机」：只打开大厅，等用户创建或加入
   QYS.net.openLobby = function (v) {
     view = v;
+    // 终局双按钮（房主）：继续一局沿用本局人数与角色池；成员/房主"回到主页面"回大厅等待或重开
+    // （必须在这里赋值：DOMContentLoaded 时 view 还是 null，无法提前绑定）
+    view.onGameOverAction = act => {
+      if (act === 'rematch') {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'rematch' }));
+      } else {
+        leftAfterOver = true;
+        view.game = null;
+        if (view.hideGameScreen) view.hideGameScreen();
+        show('lobby');
+      }
+    };
     show('lobby');
     hide('startScreen');
     show('lobbyJoinRow');
@@ -121,8 +133,8 @@ QYS.net = {};
     if (snap.over) {
       if (!overShown) {
         overShown = true;
-        // 联机终局：房主决定继续一局/回到主页面；成员等待
-        view.showGameOver(snap, { waiting: mySeat !== hostSeat });
+        // 联机终局：房主可继续一局/回主页面；成员可自行回主页面（回大厅等待房主重开）
+        view.showGameOver(snap, { member: mySeat !== hostSeat });
       }
       return;
     }
@@ -316,17 +328,6 @@ QYS.net = {};
     document.getElementById('btnOnlineStart')?.addEventListener('click', () => {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'start', playerCount: +document.getElementById('onlineCount').value, chars: onlinePicker ? onlinePicker.getSelected() : null }));
     });
-    // 终局双按钮（房主）：继续一局沿用本局人数与角色池；回到主页面返回大厅
-    if (view) view.onGameOverAction = act => {
-      if (act === 'rematch') {
-        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'rematch' }));
-      } else {
-        leftAfterOver = true;
-        view.game = null;
-        if (view.hideGameScreen) view.hideGameScreen();
-        show('lobby');
-      }
-    };
     document.getElementById('btnLobbyBack')?.addEventListener('click', () => {
       leaveRoom();
       hide('lobby');

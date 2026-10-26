@@ -2,6 +2,7 @@
 (function () {
   const $ = s => document.querySelector(s);
   const view = QYS.ui.create($('#gameRoot'));
+  window.__qysView = view; // 测试钩子：单机/联机页均可访问界面层
   let game = null;
   let last = { count: 5, seat: 0, pool: null }; // 上一局设置：终局"继续一局"沿用
 
@@ -31,6 +32,7 @@
       ioFor: p => (p.seat === humanSeat ? view.io : QYS.bot.io()),
     });
     view.attach(game);
+    window.__qysGame = game; // 测试钩子：控制台/端到端可访问当前对局
     $('#startScreen').hidden = true;
 
     (async () => {

@@ -632,9 +632,9 @@ QYS.ui.create = function (root) {
   view.showGameOver = (g, opts = {}) => {
     const rows = g.players.map(p =>
       `<tr><td>${p.name}</td><td>${ID_NAME[p.identity]}</td><td>${p.alive ? '存活' : '阵亡'}</td><td>${p.seat === g.humanSeat ? '你' : ''}</td></tr>`).join('');
-    // 终局操作：本地/联机房主 → 继续一局 + 回到主页面；联机非房主 → 等待房主决定
-    const actions = opts.waiting
-      ? '<div class="waitTip">本局已结束 · 等待房主选择继续一局或回到主页面…</div>'
+    // 终局操作：本地/联机房主 → 继续一局 + 回到主页面；联机成员 → 可自行回到主页面（等待房主重开）
+    const actions = opts.member
+      ? '<div class="waitTip">本局已结束 · 等待房主选择继续一局…</div><div class="overBtns"><button class="btn" data-act="home">回到主页面</button></div>'
       : '<div class="overBtns"><button class="btn primary" data-act="rematch">继续一局</button><button class="btn" data-act="home">回到主页面</button></div>';
     overlay.innerHTML = `<div class="panel">
       <h1 class="winTitle">${g.winner === '平局' || !g.winner ? '平局' : g.winner + ' 获胜'}</h1>
