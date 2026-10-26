@@ -550,7 +550,15 @@ QYS.core = QYS.core || {};
 
     const dropAll = p => {
       game.voidAllCurse(p); // 金针菇诅咒随阵亡移出游戏，不进弃牌堆
-      for (const c of p.hand.splice(0)) game.toDiscard(c, p, '弃置');
+      // 大狗叫/叫叫叫（vanish）同样移出游戏：进弃牌堆会被洗回牌堆，从此被人随机摸到
+      const hand = p.hand.splice(0);
+      for (const c of hand) {
+        if (QYS.def(c)?.vanish) {
+          game.log(`${QYS.cardLabel(c)}随阵亡移出游戏`, 'system');
+          continue;
+        }
+        game.toDiscard(c, p, '弃置');
+      }
       for (const [slot, c] of Object.entries(p.equips)) { if (c) { game.toDiscard(c, p, '弃置'); p.equips[slot] = null; } }
       for (const c of p.judges.splice(0)) game.toDiscard(c, p, '弃置');
     };

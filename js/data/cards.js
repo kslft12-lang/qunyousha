@@ -142,7 +142,7 @@ QYS.data.cards = [
           return;
         }
         g.discardFromHand(responder, sha, '打出');
-        g.log(`${responder.name} 打出了【杀】`, 'use');
+        g.log(`${responder.name} 打出了${QYS.cardLabel(sha)}`, 'use');
         [responder, attacker] = [attacker, responder];
       }
     },
@@ -160,7 +160,7 @@ QYS.data.cards = [
         }
         if (await g.askWuxie({ user, card, target: t })) continue;
         const sha = await g.askResponse(t, '杀');
-        if (sha) { g.discardFromHand(t, sha, '打出'); g.log(`${t.name} 打出了【杀】`, 'use'); }
+        if (sha) { g.discardFromHand(t, sha, '打出'); g.log(`${t.name} 打出了${QYS.cardLabel(sha)}`, 'use'); }
         else await g.damage({ source: user, target: t, amount: 1, tag: '南蛮入侵' });
       }
     },
@@ -394,12 +394,15 @@ QYS.data.cards = [
         if (!dodged) {
           anyHit = true;
           // 大狗叫额外效果：未被闪时往对方手牌增加一张【叫叫叫】诅咒牌
-          tgt.hand.push({
-            defId: 'jiaojiaojiao',
-            suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0],
-            number: 1 + ((Math.random() * 13) | 0),
-          });
-          g.log(`${tgt.name} 被【大狗叫】命中，手牌中被塞入一张【叫叫叫】`, 'skill');
+          // （目标若已被此杀打死，其手牌已结算完毕，不再塞入）
+          if (tgt.alive) {
+            tgt.hand.push({
+              defId: 'jiaojiaojiao',
+              suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0],
+              number: 1 + ((Math.random() * 13) | 0),
+            });
+            g.log(`${tgt.name} 被【大狗叫】命中，手牌中被塞入一张【叫叫叫】`, 'skill');
+          }
         }
       }
       if (guantang && anyHit) await g.drawCards(user, 1);

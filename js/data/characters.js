@@ -155,6 +155,7 @@ QYS.data.skills = {
         if (sha) {
           game.discardFromHand(src, sha, '使用');
           game.log(`${src.name} 被迫使用${QYS.cardLabel(sha)}`, 'use');
+          await game.emit('becomeTarget', { user: src, target: tgt, card: sha }); // 保卫胡萝卜等"被杀指定"类触发技
           await game.shaResolve(src, tgt, 0);
         } else {
           game.log(`${src.name} 没有【杀】，命令落空`, 'system');
