@@ -53,10 +53,13 @@ QYS.data.cards = [
         user.blade++;
         g.log(`【太刀高手】${user.name} 的太刀升至 ${['无', '白刃（攻击范围+1）', '黄刃（每回合两张杀）', '红刃（杀伤害+1）'][user.blade]}`, 'skill');
       }
-      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1
+      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1；真蓄斩蓄力每格+1（一次性消耗，+3 时无法被闪避或无效）
       const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
       const bladeDmg = g.hasSkill(user, 'sk_taidao') && user.blade >= 3 ? 1 : 0;
-      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
+      const chargeBonus = g.consumeCharge(user);
+      if (chargeBonus > 0) g.log(`【真蓄斩】${user.name} 释放 ${chargeBonus} 格蓄力，此【杀】威力+${chargeBonus}${chargeBonus >= 3 ? '（无法被闪避或无效）' : ''}`, 'skill');
+      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg + chargeBonus;
+      const undodgeable = chargeBonus >= 3;
       // TODO(规则): 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸（多人目标命中任意一名即摸一张）
       const guantang = g.hasSkill(user, 'sk_guantangbao') && ts.some(t => t.hp === 1);
       user.turn.wine = false;
@@ -66,7 +69,7 @@ QYS.data.cards = [
         if (g.over) break;
         // 古锭刀：对已受伤角色的杀伤害+1
         const guding = user.equips.weapon && QYS.def(user.equips.weapon).id === 'gudingdao' && tgt.hp < tgt.maxHp ? 1 : 0;
-        if (await g.shaResolve(user, tgt, base + guding, card)) anyHit = true;
+        if (await g.shaResolve(user, tgt, base + guding, card, { undodgeable })) anyHit = true;
       }
       if (guantang && anyHit) await g.drawCards(user, 1);
     },
@@ -377,10 +380,13 @@ QYS.data.cards = [
         user.blade++;
         g.log(`【太刀高手】${user.name} 的太刀升至 ${['无', '白刃（攻击范围+1）', '黄刃（每回合两张杀）', '红刃（杀伤害+1）'][user.blade]}`, 'skill');
       }
-      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1
+      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1；真蓄斩蓄力每格+1（一次性消耗，+3 时无法被闪避或无效）
       const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
       const bladeDmg = g.hasSkill(user, 'sk_taidao') && user.blade >= 3 ? 1 : 0;
-      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
+      const chargeBonus = g.consumeCharge(user);
+      if (chargeBonus > 0) g.log(`【真蓄斩】${user.name} 释放 ${chargeBonus} 格蓄力，此【大狗叫】威力+${chargeBonus}${chargeBonus >= 3 ? '（无法被闪避或无效）' : ''}`, 'skill');
+      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg + chargeBonus;
+      const undodgeable = chargeBonus >= 3;
       // 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸（多人目标命中任意一名即摸一张）
       const guantang = g.hasSkill(user, 'sk_guantangbao') && ts.some(t => t.hp === 1);
       user.turn.wine = false;
@@ -390,7 +396,7 @@ QYS.data.cards = [
         if (g.over) break;
         // 古锭刀：对已受伤角色的杀伤害+1
         const guding = user.equips.weapon && QYS.def(user.equips.weapon).id === 'gudingdao' && tgt.hp < tgt.maxHp ? 1 : 0;
-        const dodged = !(await g.shaResolve(user, tgt, base + guding, card));
+        const dodged = !(await g.shaResolve(user, tgt, base + guding, card, { undodgeable }));
         if (!dodged) {
           anyHit = true;
           // 大狗叫额外效果：未被闪时往对方手牌增加一张【叫叫叫】诅咒牌

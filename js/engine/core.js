@@ -68,6 +68,7 @@ QYS.core = QYS.core || {};
         hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null, horseExtra: null }, judges: [],
         oranges: 0,          // orange 计数（秋秋人）
         blade: 0,            // 太刀等级 0无 1白刃 2黄刃 3红刃（花生酱酱酱）
+        charge: 0,           // 真蓄斩蓄力格数（斯坦尊尊）
         cockroachUsed: false, // 蟑螂回魂是否已用（好像有一天）
         alive: true, revealed: identity === '主', turn: null, io: null,
       };
@@ -428,10 +429,19 @@ QYS.core = QYS.core || {};
 
     // 结算一次【杀】：目标闪避成功返回 false；未闪避（造成伤害）返回 true（灌汤包等技能依此判定）
     // card 传入用于仁王盾（黑色杀）等按牌面判定的防具互动
-    game.shaResolve = async (source, target, bonus = 0, card = null) => {
+    // opts.undodgeable：真蓄斩满蓄（威力+3）——此杀不能被无效/闪，跳过防具无效、网络波动与闪避结算
+    game.shaResolve = async (source, target, bonus = 0, card = null, opts = {}) => {
       if (!target.alive) return false;
+      // 相杀：目标已声明用杀反制，此杀对其无效（相杀钩子在 becomeTarget 阶段预设标记）
+      if (target.shaCounter && target.shaCounter.vs === source) {
+        target.shaCounter = null;
+        game.log(`【相杀】${target.name} 无效了 ${source ? source.name + ' 的' : ''}${card ? QYS.cardLabel(card) : '【杀】'}`, 'skill');
+        game.update();
+        return false;
+      }
       const armorId = target.equips.armor ? QYS.def(target.equips.armor).id : null;
       const qg = source && source.equips.weapon && QYS.def(source.equips.weapon).id === 'qinggangjian'; // 青釭剑：杀无视防具
+      if (opts.undodgeable) return shaHit(source, target, bonus, qg);
       // 仁王盾：黑色的【杀】无效
       if (!qg && armorId === 'renwang' && card && QYS.util.colorOf(card.suit) === 'black') {
         game.log(`${target.name} 的【仁王盾】令黑色【杀】无效`, 'skill');
@@ -471,6 +481,14 @@ QYS.core = QYS.core || {};
         }
       }
       return false;
+    };
+
+    // 真蓄斩：释放并清空蓄力，返回本次释放的格数（下一次杀的威力加成，一次性消耗）
+    game.consumeCharge = p => {
+      const b = p.charge || 0;
+      p.charge = 0;
+      if (b) game.update();
+      return b;
     };
 
     game.damage = async ({ source, target, amount = 1, tag, noArmor = false }) => {
@@ -648,6 +666,7 @@ QYS.core = QYS.core || {};
         skillIds: p.skillIds,
         oranges: p.oranges || 0,
         blade: p.blade || 0,
+        charge: p.charge || 0,
         toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
         liugou: !!(game.liugou && (game.liugou.a === p || game.liugou.b === p)),
         distGuard: p.distGuardTurn === game.turnCount,

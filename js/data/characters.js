@@ -516,6 +516,65 @@ QYS.data.skills = {
     type: 'trigger',
     desc: '锁定技。你不能装备防具；你的防具栏改为第二个坐骑栏，可以同时装备两个坐骑（如两张+1马）。',
   },
+
+  // 【大剑虾】：回合开始摸牌阶段，摸到的牌中没有杀（含大狗叫）→ 额外摸一张。实现在 rules.js 摸牌阶段。
+  sk_dajianxia: {
+    name: '大剑虾',
+    type: 'trigger',
+    desc: '锁定技。每回合开始的摸牌阶段，若你摸到的牌中没有【杀】（含【大狗叫】），你额外摸一张牌。',
+  },
+
+  // 【真蓄斩】：回合结束时若本回合未使用过杀 → 蓄力+1（头像旁 ⚡ 徽标）；
+  // 下一次杀消耗全部蓄力，每格威力+1；威力+3（即4点伤害）时此杀不能被无效/闪。
+  // 释放实现在 cards.js 的【杀】/【大狗叫】与 sk_xiangsha 反击；无效豁免实现在 core.js shaResolve（opts.undodgeable）。
+  sk_zhenxuzhan: {
+    name: '真蓄斩',
+    type: 'trigger',
+    desc: '锁定技。回合结束时，若你本回合内没有使用过【杀】，你获得1格蓄力值。你下次使用【杀】时消耗全部蓄力值：每格使此【杀】威力+1；当威力达到+3（即4点伤害）时，此【杀】不能被【闪】避或无效。',
+    hooks: {
+      phaseEnd(game, p, payload) {
+        if (payload.player !== p || payload.phase !== '结束' || !p.alive) return;
+        if (p.turn && (p.turn.shaUsed > 0 || p.turn.counterSha)) return; // 本回合用过杀（含相杀反击）不蓄力
+        p.charge = (p.charge || 0) + 1;
+        game.log(`【真蓄斩】${p.name} 本回合未用【杀】，蓄力 +1（共 ${p.charge} 格）`, 'skill');
+        game.update();
+      },
+    },
+  },
+
+  // 【相杀】：每回合一次，成为杀（含大狗叫）的目标时，可用手中一张杀反制：
+  // 无效对方的杀，并对使用者正常结算一次反击（反击伤害附加蓄力加成，满蓄同样无法被闪避）。
+  // 无效标记在 core.js shaResolve 顶部消费（target.shaCounter）。
+  sk_xiangsha: {
+    name: '相杀',
+    type: 'trigger',
+    desc: '每回合限一次，当你成为【杀】（含【大狗叫】）的目标时，你可以使用手中的一张【杀】：无效此【杀】，并立即对其使用者正常结算一次【杀】（反击伤害附加【真蓄斩】蓄力加成）。',
+    hooks: {
+      async becomeTarget(game, p, payload) {
+        if (payload.target !== p || !payload.card || !p.alive) return;
+        const d = QYS.def(payload.card);
+        if (!QYS.isSha(payload.card)) return;
+        if (p.xiangshaTurn === game.turnCount) return; // 每回合一次
+        const src = payload.user;
+        if (!src || !src.alive || src === p) return;
+        if (!p.hand.some(c => QYS.isSha(c))) return;
+        if (!(await game.askBool(p, `是否发动【相杀】？用一张【杀】无效 ${src.name} 的${QYS.cardLabel(payload.card)}，并对其反击`, { tag: '技能' }))) return;
+        const counter = p.hand.find(c => QYS.isSha(c)); // 询问后重取（手中牌可能已变）
+        if (!counter) return;
+        p.xiangshaTurn = game.turnCount;
+        if (p.turn) p.turn.counterSha = true; // 真蓄斩：本回合已使用过杀，不再蓄力（首回合前 p.turn 为空，无从蓄力）
+        game.discardFromHand(p, counter, '使用');
+        game.log(`${p.name} 发动【相杀】，以${QYS.cardLabel(counter)}迎击 ${src.name} 的${QYS.cardLabel(payload.card)}`, 'skill');
+        p.shaCounter = { vs: src }; // 对方的杀结算到 p 时被无效
+        game.update();
+        // 反击：正常造成伤害，附加蓄力加成（满蓄同样无法被闪避或无效）
+        const bonus = game.consumeCharge(p);
+        if (bonus > 0) game.log(`【真蓄斩】${p.name} 的反击释放 ${bonus} 格蓄力，威力+${bonus}${bonus >= 3 ? '（无法被闪避或无效）' : ''}`, 'skill');
+        await game.shaResolve(p, src, bonus, counter, { undodgeable: bonus >= 3 });
+        game.update();
+      },
+    },
+  },
 };
 
 QYS.data.characters = [
@@ -535,4 +594,5 @@ QYS.data.characters = [
   { id: 'mogu', name: '蘑菇', title: '菌菇召唤师', hp: 4, skills: ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang'] },
   { id: 'pgjjj', name: '苹果酱酱酱', title: '群友', hp: 4, skills: ['sk_liugou', 'sk_sepingguo'] },
   { id: 'huluobo', name: '胡萝卜', title: '群友', hp: 4, skills: ['sk_baoweihuluobo', 'sk_cougezi', 'sk_coucoude'] },
+  { id: 'sidun', name: '斯坦尊尊', title: '群友', hp: 4, skills: ['sk_dajianxia', 'sk_zhenxuzhan', 'sk_xiangsha'] },
 ];

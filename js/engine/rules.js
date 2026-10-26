@@ -165,6 +165,23 @@ QYS.rules = {};
     }
   }
 
+  // 摸牌阶段：基础2张（小笼包+1）；叫叫叫诅咒减1；大剑虾在摸到的牌无杀时额外摸一张
+  async function drawPhase(game, p) {
+    if (p.turn.skipDraw) { game.log(`${p.name} 跳过摸牌阶段`, 'system'); return; }
+    let drawCount = game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2;
+    // 叫叫叫诅咒牌：持有者抽牌数-1
+    if (p.hand.some(c => c.defId === 'jiaojiaojiao')) {
+      drawCount = Math.max(drawCount - 1, 1); // 至少摸1张
+      game.log(`${p.name} 持有【叫叫叫】诅咒牌，抽牌数-1`, 'skill');
+    }
+    const got = await game.drawCards(p, drawCount);
+    // 大剑虾：回合开始摸到的牌中没有杀（含大狗叫）→ 额外摸一张
+    if (game.hasSkill(p, 'sk_dajianxia') && got.length && !got.some(c => QYS.isSha(c))) {
+      game.log(`${p.name} 的【大剑虾】触发：摸到的牌中没有【杀】，额外摸一张牌`, 'skill');
+      await game.drawCards(p, 1);
+    }
+  }
+
   async function judgePhase(game, p) {
     const cards = p.judges.splice(0);
     for (const card of cards) {
@@ -226,19 +243,7 @@ QYS.rules = {};
       game.phase = ph;
       await game.emit('phaseStart', { player: p, phase: ph });
       if (ph === '判定') await judgePhase(game, p);
-      else if (ph === '摸牌') {
-        if (p.turn.skipDraw) game.log(`${p.name} 跳过摸牌阶段`, 'system');
-        else {
-          // 基础摸牌数：小笼包技能额外+1
-          let drawCount = game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2;
-          // 叫叫叫诅咒牌：持有者抽牌数-1
-          if (p.hand.some(c => c.defId === 'jiaojiaojiao')) {
-            drawCount = Math.max(drawCount - 1, 1); // 至少摸1张
-            game.log(`${p.name} 持有【叫叫叫】诅咒牌，抽牌数-1`, 'skill');
-          }
-          await game.drawCards(p, drawCount);
-        }
-      }
+      else if (ph === '摸牌') await drawPhase(game, p);
       else if (ph === '出牌') {
         if (p.turn.skipPlay) game.log(`${p.name} 跳过出牌阶段`, 'system');
         else await playPhase(game, p);
@@ -251,6 +256,7 @@ QYS.rules = {};
     game.liugou = null; // 【遛狗去咯】：保护只持续到本回合结束
   }
 
+  QYS.rules.drawPhase = drawPhase; // 暴露供测试
   QYS.rules.run = async function (game) {
     game.currentIdx = game.lordSeat ?? game.humanSeat ?? 0; // 行动顺序从主公（1号）开始
     game.log('游戏开始，身份分配完毕', 'system');

@@ -133,8 +133,12 @@ QYS.ui.create = function (root) {
     const bladeLv = p.blade ?? 0;
     const bladeIcon = bladeLv > 0 && (p.skillIds || []).includes('sk_taidao')
       ? `<span class="bladeIcon b${bladeLv}" title="太刀·${['', '白刃', '黄刃', '红刃'][bladeLv]}：${BLADE_NAME[bladeLv]}">刀</span>` : '';
+    // 真蓄斩（斯坦尊尊）：头像旁 ⚡ 蓄力徽标，常驻展示（满3格变红 = 下一次杀无法被闪避或无效）
+    const charge = p.charge ?? 0;
+    const chargeBadge = (p.skillIds || []).includes('sk_zhenxuzhan')
+      ? `<span class="chargeBadge${charge >= 3 ? ' full' : ''}" title="【真蓄斩】蓄力 ${charge} 格：下一次【杀】威力+${charge}${charge >= 3 ? '，无法被闪避或无效' : ''}">⚡${charge}</span>` : '';
     return `<div class="player${ringCls} ${cur ? 'current' : ''} ${selectable ? 'selectable' : ''} ${selected ? 'selected' : ''} ${p.alive ? '' : 'dead'}" data-seat="${p.seat}"${styleAttr}>
-      <div class="avWrap">${avatarHtml(p)}${orgBadge}${bladeIcon}</div>
+      <div class="avWrap">${avatarHtml(p)}${orgBadge}${bladeIcon}${chargeBadge}</div>
       <div class="pinfo">
         <div class="pname"><span class="pnum">${num}号</span><span class="pnm">${p.name}</span></div>
         <div class="ptitle"><span class="ptt">${ch ? `${ch.name} · ${ch.title}` : p.title}</span>${badgeHtml(p)}${p.seat === g.humanSeat ? '<span class="badge self">你</span>' : ''}</div>

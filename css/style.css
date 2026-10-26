@@ -195,6 +195,18 @@ button { font-family: inherit; cursor: pointer; }
 .bladeIcon.b1 { color: #f2f2f2; border-color: #cfcfcf; }
 .bladeIcon.b2 { color: #ffd54a; border-color: #c9a227; }
 .bladeIcon.b3 { color: #ff5a4a; border-color: #c23b2e; }
+/* 真蓄斩蓄力徽标（斯坦尊尊）：头像左下 ⚡N，满3格转红 = 下一次杀无法被闪避或无效 */
+.chargeBadge {
+  position: absolute; bottom: -4px; right: -6px;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 9px;
+  background: #22335e; border: 1px solid #7a92d9;
+  color: #cfe0ff; font-size: 11px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 3px #00000088;
+  cursor: help;
+}
+.chargeBadge.full { background: #5e2233; border-color: #e08aa0; color: #ffd6e0; }
 
 .pinfo { min-width: 0; flex: 1; }
 /* 姓名独占一行：过长时省略号（身份徽章下移到副标题行），避免"机器/人3"这种断字 */
