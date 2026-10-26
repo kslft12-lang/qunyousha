@@ -350,18 +350,26 @@ QYS.core = QYS.core || {};
         const j = game.judge(target, '八卦阵');
         if (j.color === 'red') { game.log(`八卦阵判定为红色，视为打出【闪】`, 'use'); game.update(); return true; }
       }
-      const shan = await game.askResponse(target, '闪');
-      if (shan) {
-        game.discardFromHand(target, shan, '打出');
-        game.log(`${target.name} 打出了【闪】`, 'use');
-        // 凑鸽子：使用【闪】令【杀】无效后摸一张牌（万箭齐发不算杀）
-        if (cause === 'sha' && game.hasSkill(target, 'sk_cougezi')) {
-          game.log(`${target.name} 的【凑鸽子】触发`, 'skill');
-          await game.drawCards(target, 1);
-        }
-        game.update();
-        return true;
+    // 太刀（花生酱酱酱装备）：使用/打出【闪】（含一几一几当闪）后摸一张牌
+    const taidaoDraw = async t => {
+      if (t.equips.weapon && QYS.def(t.equips.weapon).id === 'taidao' && game.hasSkill(t, 'sk_taidao')) {
+        game.log(`【太刀】剑意如闪：${t.name} 摸一张牌`, 'skill');
+        await game.drawCards(t, 1);
       }
+    };
+    const shan = await game.askResponse(target, '闪');
+    if (shan) {
+      game.discardFromHand(target, shan, '打出');
+      game.log(`${target.name} 打出了【闪】`, 'use');
+      // 凑鸽子：使用【闪】令【杀】无效后摸一张牌（万箭齐发不算杀）
+      if (cause === 'sha' && game.hasSkill(target, 'sk_cougezi')) {
+        game.log(`${target.name} 的【凑鸽子】触发`, 'skill');
+        await game.drawCards(target, 1);
+      }
+      await taidaoDraw(target);
+      game.update();
+      return true;
+    }
 
       // 【一几一几】：仅被【杀】指定为目标时可把任意手牌当【闪】（万箭齐发、被万人迷选中代打均不触发）
       if (game.hasSkill(target, 'sk_yijiyiji') && cause === 'sha' && target.hand.length) {
@@ -370,6 +378,7 @@ QYS.core = QYS.core || {};
           if (card && target.hand.includes(card)) {
             game.discardFromHand(target, card, '打出');
             game.log(`${target.name} 发动【一几一几】，将${QYS.cardLabel(card)}当作【闪】打出`, 'skill');
+            await taidaoDraw(target); // 太刀：一几一几视为打出【闪】
             game.update();
             return true;
           }
@@ -439,10 +448,15 @@ QYS.core = QYS.core || {};
           game.update();
         }
       }
-      // 太刀高手：以杀杀死敌人 → 跌落一个刃等级
+      // 太刀高手：以杀杀死敌人 → 跌落一个刃等级（装备【太刀】时刃等级永不下降）
       if (!target.alive && source && game.hasSkill(source, 'sk_taidao') && source.blade > 0) {
-        source.blade--;
-        game.log(`【太刀高手】${source.name} 以杀毙敌，太刀跌落至 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
+        const w = source.equips.weapon;
+        if (w && QYS.def(w).id === 'taidao') {
+          game.log(`【太刀】剑意不灭：${source.name} 以杀毙敌，刃等级保持 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
+        } else {
+          source.blade--;
+          game.log(`【太刀高手】${source.name} 以杀毙敌，太刀跌落至 ${['无', '白刃', '黄刃', '红刃'][source.blade]}`, 'skill');
+        }
         game.update();
       }
       return true;

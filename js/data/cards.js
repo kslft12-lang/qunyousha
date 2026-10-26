@@ -324,6 +324,16 @@ QYS.data.cards = [
     desc: '攻击范围4。当你使用的【杀】是你最后的手牌时，此【杀】可以指定至多三名目标。',
   },
   {
+    // 太刀（花生酱酱酱专属强化）：刃不降实现在 core.js shaHit；闪/一几一几摸牌实现在 core.js dodgeCheck
+    id: 'taidao', name: '太刀', type: 'equip', slot: 'weapon', range: 2, deckCount: 1,
+    desc: '攻击范围2。【花生酱酱酱】装备时：太刀的刃等级永不下降；你使用或打出【闪】时（【一几一几】将手牌当作【闪】也算）摸一张牌。',
+  },
+  {
+    // 大剑（斯坦尊尊专属强化）：蓄力加成实现在 sk_zhenxuzhan 的 phaseEnd 钩子
+    id: 'dajian', name: '大剑', type: 'equip', slot: 'weapon', range: 2, deckCount: 1,
+    desc: '攻击范围2。【斯坦尊尊】装备时：每回合结束时蓄力值+1（无论本回合是否使用过【杀】）。',
+  },
+  {
     id: 'qilingong', name: '麒麟弓', type: 'equip', slot: 'weapon', range: 5, deckCount: 1,
     desc: '攻击范围5。当你使用【杀】对目标角色造成伤害后，你可以弃置其装备区里的一张坐骑牌。',
   },

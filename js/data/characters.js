@@ -534,9 +534,13 @@ QYS.data.skills = {
     hooks: {
       phaseEnd(game, p, payload) {
         if (payload.player !== p || payload.phase !== '结束' || !p.alive) return;
-        if (p.turn && (p.turn.shaUsed > 0 || p.turn.counterSha)) return; // 本回合用过杀（含相杀反击）不蓄力
-        p.charge = (p.charge || 0) + 1;
-        game.log(`【真蓄斩】${p.name} 本回合未用【杀】，蓄力 +1（共 ${p.charge} 格）`, 'skill');
+        const hasDajian = p.equips.weapon && QYS.def(p.equips.weapon).id === 'dajian';
+        const usedSha = p.turn && (p.turn.shaUsed > 0 || p.turn.counterSha);
+        const reasons = [];
+        if (!usedSha) { p.charge++; reasons.push('真蓄斩'); }       // 本回合未用杀：真蓄斩蓄力+1
+        if (hasDajian) { p.charge++; reasons.push('大剑'); }        // 大剑：每回合蓄力+1，无视用杀
+        if (!reasons.length) return;
+        game.log(`【${reasons.join('】【')}】${p.name} 蓄力 +${reasons.length}（共 ${p.charge} 格）`, 'skill');
         game.update();
       },
     },

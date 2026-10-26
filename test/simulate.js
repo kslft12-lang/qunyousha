@@ -47,6 +47,7 @@ async function play(n) {
     const g = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
     const me = g.players[0], far = g.players[2]; // 环距 2
     me.skillIds = []; // 清空随机分配的技能，保证杀次数断言不受角色影响
+    g.players.slice(1).forEach(q => { q.skillIds = (q.skillIds || []).filter(s => s !== 'sk_wenzhe'); }); // 排除随机凑鸽子（闻着凑吃着香：次数用尽仍可对其出杀）
     if (g.distance(me, far) !== 2) throw new Error('环距离计算错误');
     if (g.inShaRange(me, far)) throw new Error('无武器距离2应在范围外');
     me.equips.weapon = { defId: 'qinglong', suit: '♠', number: 5 };
