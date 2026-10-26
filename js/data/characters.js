@@ -601,6 +601,61 @@ QYS.data.skills = {
     type: 'trigger',
     desc: '锁定技。本局游戏开始时，一张【臭鸡炸炸炸】洗入牌堆：只有你能使用它（指定一名其他角色，丢弃其所有【桃】和【酒】并令其生命值归零）；其他角色抽到时会将其放回牌堆并重新抽一张牌。',
   },
+
+  // 【破壳】：第4回合开始时一次性变形（先于【众宾欢也】结算——角色技能表中排在其前）。
+  sk_poke: {
+    name: '破壳',
+    type: 'trigger',
+    desc: '锁定技。第四回合开始时触发：【奶龙蛋】失效；【众宾欢也】改为可置入 0~8 名角色的手牌各两张【奶龙大笑】；你回复所有体力，抽牌数、手牌上限、体力上限+2。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (game.turnCount !== 4 || p.shellBroken || !p.alive) return;
+        p.shellBroken = true;
+        const i = p.skillIds.indexOf('sk_nailongdan');
+        if (i >= 0) p.skillIds.splice(i, 1); // 奶龙蛋失效（从技能列表移除，界面同步消失）
+        p.maxHp += 2;
+        p.hp = p.maxHp; // 回满血（按新上限）
+        game.log(`── 【破壳】！${p.name} 的蛋壳碎裂：奶龙蛋失效，众宾欢也强化（0~8人各两张），体力上限+2并回满，抽牌数与手牌上限+2 ──`, 'turn');
+        game.update();
+      },
+    },
+  },
+
+  // 【众宾欢也】：回合开始往 0~3 名角色手牌各置入一张奶龙大笑；破壳后 0~8 名各两张。
+  sk_zhongbhuan: {
+    name: '众宾欢也',
+    type: 'trigger',
+    desc: '回合开始时，你可以将一张【奶龙大笑】置入至多 3 名角色的手牌（【破壳】后改为至多 8 名角色各两张）。【奶龙大笑】会占用其一回合的手牌上限，随后自动销毁。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p || !p.alive) return;
+        const broken = game.hasSkill(p, 'sk_poke') && p.shellBroken;
+        const maxT = broken ? 8 : 3;
+        const per = broken ? 2 : 1;
+        const cands = game.alive();
+        if (!cands.length) return;
+        const sel = await game.askTargets(p, {
+          candidates: cands, min: 0, max: maxT,
+          hint: `【众宾欢也】：选择至多 ${maxT} 名角色，各置入 ${per} 张【奶龙大笑】（取消则跳过）`,
+        });
+        if (!sel || !sel.length) return;
+        for (const t of sel) {
+          for (let k = 0; k < per; k++)
+            t.hand.push({ defId: 'nailongdaxiao', suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0], number: 1 + ((Math.random() * 13) | 0) });
+          game.log(`${p.name} 往 ${t.name} 的手牌中置入了 ${per} 张【奶龙大笑】`, 'skill');
+        }
+        game.update();
+      },
+    },
+  },
+
+  // 【奶龙蛋】：手牌上限-1、抽牌数-1（实现在 rules.js drawPhase/discardPhase）、免疫 1 点伤害（实现在 core.js damage）。
+  // 破壳时从 skillIds 移除即整体失效。
+  sk_nailongdan: {
+    name: '奶龙蛋',
+    type: 'trigger',
+    desc: '锁定技。你的手牌上限-1，抽牌数-1；你免疫值为 1 点的伤害（两点及以上的伤害才能对你造成伤害）。【破壳】后此技能失效。',
+  },
 };
 
 QYS.data.characters = [
@@ -622,4 +677,5 @@ QYS.data.characters = [
   { id: 'huluobo', name: '胡萝卜', title: '群友', hp: 4, skills: ['sk_baoweihuluobo', 'sk_cougezi', 'sk_coucoude'] },
   { id: 'sidun', name: '斯坦尊尊', title: '群友', hp: 4, skills: ['sk_dajianxia', 'sk_zhenxuzhan', 'sk_xiangsha'] },
   { id: 'cougezi', name: '凑鸽子', title: '群友', hp: 9, skills: ['sk_jiaoxiang', 'sk_wenzhe', 'sk_chouji'] },
+  { id: 'naidashen', name: '奶·大神', title: '群友', hp: 4, skills: ['sk_poke', 'sk_zhongbhuan', 'sk_nailongdan'] },
 ];

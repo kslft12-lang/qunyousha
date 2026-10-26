@@ -30,9 +30,40 @@ QYS.ui.create = function (root) {
   const ID_CLS = { 主: 'lord', 忠: 'loyal', 反: 'rebel', 内: 'spy' };
   const ID_SHORT = { 主: '主', 忠: '忠', 反: '反', 内: '内' };
 
-  const view = { game: null, state: null, splashResolve: null, pinnedKey: null, hoverKey: null, discExpanded: false };
+  const view = { game: null, state: null, splashResolve: null, pinnedKey: null, hoverKey: null, discExpanded: false, nailongSeen: null };
   // 武将牌实测尺寸（含间距余量），供椭圆布局用；首帧用估算值，之后按实际渲染结果更新
   let cw = 180, ch = 188;
+
+  // 奶龙大笑音效：优先播放 assets/audio/nailongdaxiao.mp3（用户可自行放置）；
+  // 文件缺失时用 Web Audio 合成一段卡通"哈哈哈"回退
+  function synthLaugh() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      let t = ctx.currentTime + 0.05;
+      for (let round = 0; round < 2; round++) {
+        for (let i = 0; i < 3; i++) {
+          const osc = ctx.createOscillator(), gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(300 - i * 30, t);           // "哈"起音
+          osc.frequency.exponentialRampToValueAtTime(150 - i * 15, t + 0.16); // 下滑
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.2);
+          t += 0.22;                                               // 哈…哈…哈
+        }
+        t += 0.15;                                                 // 停顿后再来一轮
+      }
+    } catch { /* 无声环境（Node/无音频设备）：忽略 */ }
+  }
+  function playNailong() {
+    try {
+      const a = new Audio('assets/audio/nailongdaxiao.mp3');
+      a.volume = 0.75;
+      a.play().catch(() => synthLaugh()); // 文件缺失/解码失败 → 合成回退
+    } catch { synthLaugh(); }
+  }
   // 触屏（无悬浮）：浏览器点按会先合成 mouseover——若照常弹卡牌详情，抽屉会盖住操作区/目标，点按被吞。
   // 触屏改为"点按固定查看"：不可用/未选中态点手牌、点技能标签 → 固定详情；再点其他位置取消。
   const isTouch = !!(window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches);
@@ -278,6 +309,10 @@ QYS.ui.create = function (root) {
     }
 
     actionBar.innerHTML = actionBarHtml();
+    // 奶龙大笑音效：日志里出现新的 nailong 条目 → 播放（本地与联机快照同源）
+    const nlCount = g.logs.reduce((n, l) => n + (l.type === 'nailong' ? 1 : 0), 0);
+    if (view.nailongSeen == null) view.nailongSeen = nlCount; // 首帧基线：不重放历史
+    else if (nlCount > view.nailongSeen) { view.nailongSeen = nlCount; playNailong(); }
     // 战报：只在原本贴顶时跟随新消息；玩家往下翻看历史时保留滚动位置，不被重渲染拉回顶部
     const logAtTop = logList.scrollTop <= 2;
     const logScroll = logList.scrollTop;

@@ -179,7 +179,7 @@ async function play(n) {
       const g8 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['噜', '甲', '乙', '丙', '丁'], ioFor: () => io8({ card: () => false }) });
       const [lulu, jia, yi] = g8.players;
       lulu.skillIds = ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'];
-      jia.skillIds = []; yi.skillIds = []; // 钉死对手技能，排除随机角色的蟑螂/呜呜呜袜等干扰
+      g8.players.slice(1).forEach(q => { q.skillIds = []; }); // 钉死其余玩家（含4/5号位随机角色）：排除闻着凑吃着香对杀次数断言的干扰
       if (!g8.inShaRange(lulu, yi)) throw new Error('狼牙棒主公攻击范围应+1覆盖距离2');
       lulu.identity = '反';
       if (g8.inShaRange(lulu, yi)) throw new Error('非主公狼牙棒不应生效');

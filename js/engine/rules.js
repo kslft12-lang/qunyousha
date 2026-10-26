@@ -167,14 +167,20 @@ QYS.rules = {};
     }
   }
 
-  // 摸牌阶段：基础2张（小笼包+1）；叫叫叫诅咒减1；大剑虾在摸到的牌无杀时额外摸一张
+  // 摸牌阶段：基础2张（小笼包+1、破壳+2）；叫叫叫/奶龙蛋各-1；大剑虾无杀额外摸一张
   async function drawPhase(game, p) {
     if (p.turn.skipDraw) { game.log(`${p.name} 跳过摸牌阶段`, 'system'); return; }
     let drawCount = game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2;
+    if (game.hasSkill(p, 'sk_poke') && p.shellBroken) drawCount += 2; // 破壳：抽牌数+2
     // 叫叫叫诅咒牌：持有者抽牌数-1
     if (p.hand.some(c => c.defId === 'jiaojiaojiao')) {
       drawCount = Math.max(drawCount - 1, 1); // 至少摸1张
       game.log(`${p.name} 持有【叫叫叫】诅咒牌，抽牌数-1`, 'skill');
+    }
+    // 奶龙蛋：抽牌数-1
+    if (game.hasSkill(p, 'sk_nailongdan')) {
+      drawCount = Math.max(drawCount - 1, 1);
+      game.log(`${p.name} 的【奶龙蛋】：抽牌数-1`, 'skill');
     }
     const got = await game.drawCards(p, drawCount);
     // 大剑虾：回合开始摸到的牌中没有杀（含大狗叫）→ 额外摸一张
@@ -206,9 +212,11 @@ QYS.rules = {};
   }
 
   async function discardPhase(game, p) {
-    // 小笼包：手牌上限-1（最低 0）；似乎有些触动：手牌上限+1
+    // 手牌上限：小笼包-1（最低0）、似乎有些触动+1、破壳+2、奶龙蛋-1
     let limit = game.hasSkill(p, 'sk_xiaolongbao') ? Math.max(0, p.hp - 1) : p.hp;
     if (game.hasSkill(p, 'sk_chudong')) limit += 1;
+    if (game.hasSkill(p, 'sk_poke') && p.shellBroken) limit += 2;
+    if (game.hasSkill(p, 'sk_nailongdan')) limit = Math.max(0, limit - 1);
     while (!game.over && p.alive && p.hand.length > limit) {
       // 诅咒牌无法弃置：只剩诅咒时只能保留超限
       const normal = p.hand.filter(c => !QYS.isCurse(c));
@@ -224,6 +232,14 @@ QYS.rules = {};
         game.discardFromHand(p, r);
         game.log(`${p.name} 随机弃置了${QYS.cardLabel(r)}`, 'system');
       }
+      game.update();
+    }
+    // 奶龙大笑：占用一回合手牌上限后，弃牌阶段结束即自动丢弃并销毁（不进弃牌堆）
+    const longs = p.hand.filter(c => c.defId === 'nailongdaxiao');
+    if (longs.length) {
+      p.hand = p.hand.filter(c => c.defId !== 'nailongdaxiao');
+      game.log(`${p.name} 手中的 ${longs.length} 张【奶龙大笑】到期销毁`, 'nailong');
+      game.log('🎵 奶龙大笑～哈哈哈哈哈哈～', 'nailong');
       game.update();
     }
   }
@@ -259,6 +275,7 @@ QYS.rules = {};
   }
 
   QYS.rules.drawPhase = drawPhase; // 暴露供测试
+  QYS.rules.discardPhase = discardPhase;
   QYS.rules.run = async function (game) {
     game.currentIdx = game.lordSeat ?? game.humanSeat ?? 0; // 行动顺序从主公（1号）开始
     game.log('游戏开始，身份分配完毕', 'system');

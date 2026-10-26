@@ -15,8 +15,8 @@ QYS.core = QYS.core || {};
     cardLabel: c => `【${QYS.def(c).name}】`,
     util: { colorOf, numStr, shuffle, sleep },
   });
-  // 诅咒牌（金针菇/叫叫叫）：不可弃置、不可交给他人、不可被拆桥顺手拿走
-  QYS.isCurse = c => c.defId === 'jinzhengu' || c.defId === 'jiaojiaojiao';
+  // 诅咒牌（金针菇/叫叫叫/奶龙大笑）：不可弃置、不可交给他人、不可被拆桥顺手拿走
+  QYS.isCurse = c => c.defId === 'jinzhengu' || c.defId === 'jiaojiaojiao' || c.defId === 'nailongdaxiao';
   // 不可转移牌：诅咒牌 + 臭鸡炸炸炸（只可被凑鸽子持有使用，拆桥/顺手/交牌等一律绕开）
   QYS.nonTransferable = c => QYS.isCurse(c) || c.defId === 'choujizhazha';
   // 视为【杀】的牌：大狗叫拥有【杀】的效果（决斗/南蛮/豆沙包等需要"打出杀"的场合同样可用）
@@ -309,7 +309,9 @@ QYS.core = QYS.core || {};
       // 遛狗去咯：被保护的两名角色本回合不可被任何卡牌/技能选中
       if (game.liugou) opts.candidates = opts.candidates.filter(q => q !== game.liugou.a && q !== game.liugou.b);
       if (!opts.candidates.length || !p.io) return null;
-      return p.io.chooseTargets(p, opts);
+      const v = await p.io.chooseTargets(p, opts);
+      // 引擎层兜底截断：超出 max 的目标一律丢弃（联机服务端已校验，此处防本地/机器人路径）
+      return Array.isArray(v) ? v.slice(0, opts.max ?? v.length) : v;
     };
     game.askResponse = (p, name, hint) => game.askCard(p, {
       // 【大狗叫】拥有【杀】的效果：需要"打出杀"时同样可以打出
@@ -542,6 +544,12 @@ QYS.core = QYS.core || {};
         amount = 1;
         payload.amount = 1; // 同步载荷，后续钩子读到的是实际伤害
       }
+      // 奶龙蛋（奶·大神）：免疫 1 点伤害——削减后恰为 1 点的伤害同样免疫（与白银狮子联动）
+      if (amount === 1 && game.hasSkill(target, 'sk_nailongdan')) {
+        game.log(`${target.name} 的【奶龙蛋】弹开了这 1 点伤害`, 'skill');
+        game.update();
+        return;
+      }
       // 护心镜：受到不小于体力值的伤害时，可弃置之防止此伤害
       if (armorId === 'huxinjing' && amount >= target.hp
         && await game.askBool(target, `发动【护心镜】？弃置之，防止这 ${amount} 点伤害（当前体力 ${target.hp}）`, { tag: '技能' })) {
@@ -621,7 +629,7 @@ QYS.core = QYS.core || {};
       // 大狗叫/叫叫叫（vanish）随阵亡移出；臭鸡炸炸炸同理——持有者死后无人可用，留在牌堆只会无限弹回浪费抽牌
       const hand = p.hand.splice(0);
       for (const c of hand) {
-        if (QYS.def(c)?.vanish || c.defId === 'choujizhazha') {
+        if (QYS.def(c)?.vanish || QYS.nonTransferable(c)) { // vanish 牌、诅咒牌与臭鸡炸炸炸随阵亡移出游戏
           game.log(`${QYS.cardLabel(c)}随阵亡移出游戏`, 'system');
           continue;
         }
