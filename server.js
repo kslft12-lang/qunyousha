@@ -82,6 +82,7 @@ function newRoom() {
     gameSeq: 0,             // 对局编号（递增；客户端据此识别换局）
     disconnected: new Set(), // 掉线座位，其提问按机器人默认作答
     rush: new Set(),         // 抢主公的座位（每次开局后清空）
+    chat: [],                // 聊天记录（最近 50 条，新人加入补发）
     game: null,
     askSeq: 0,
   };
@@ -246,8 +247,10 @@ function joinRoom(conn, room, name) {
   conn.room = room.code;
   conn.name = name;
   conn.pending = {};
+  conn.lastChatTs = 0;
   room.conns.set(conn, seat);
   conn.send({ t: 'hello', seat, code: room.code });
+  if (room.chat.length) conn.send({ t: 'chatLog', msgs: room.chat.slice(-50) });
   broadcastLobby(room);
   if (room.game) sendState(conn);
   console.log(`[${room.code}] ${name} 加入，座位 ${seat + 1}${room.game && !room.game.over ? '（观战）' : ''}`);
@@ -288,6 +291,21 @@ function onMessage(conn, str) {
     if (room.conns.get(conn) !== room.hostSeat) return;
     if (!room.game || !room.game.over) return;
     startGame(room, room.playerCount, room.charPool);
+  } else if (msg.t === 'chat') {
+    // 聊天：校验长度与频率后广播给全房间，并留存最近 50 条供迟到者补发
+    const room = roomOf(conn);
+    if (!room) return;
+    const seat = room.conns.get(conn);
+    if (seat == null) return;
+    const now = Date.now();
+    if (now - (conn.lastChatTs || 0) < 300) return; // 简易限频：300ms 一条
+    conn.lastChatTs = now;
+    const text = String(msg.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    if (!text) return;
+    const entry = { from: conn.name || `座位${seat + 1}`, seat, text, ts: now };
+    room.chat.push(entry);
+    if (room.chat.length > 50) room.chat.splice(0, room.chat.length - 50);
+    for (const c of room.conns.keys()) c.send({ t: 'chat', ...entry });
   } else if (msg.t === 'rush') {
     const room = roomOf(conn);
     if (!room) return;

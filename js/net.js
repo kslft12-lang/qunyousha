@@ -55,8 +55,18 @@ QYS.net = {};
       hide('lobbyJoinRow');
       show('lobbyCodeRow');
       document.getElementById('lobbyCodeText').textContent = roomCode;
+      ensureChatUI();
+      renderChat(); // 入房：渲染补发的聊天历史
     } else if (msg.t === 'error') {
       lobbyMsg(msg.msg || '加入失败');
+    } else if (msg.t === 'chatLog') {
+      chatLog.length = 0;
+      for (const m of msg.msgs || []) chatLog.push(m);
+      renderChat();
+    } else if (msg.t === 'chat') {
+      chatLog.push(msg);
+      if (chatLog.length > 60) chatLog.splice(0, chatLog.length - 60);
+      renderChat();
     } else if (msg.t === 'lobby') {
       renderLobby(msg);
     } else if (msg.t === 'state') {
@@ -179,6 +189,116 @@ QYS.net = {};
     if (ws) { ws.close(); ws = null; }
     mySeat = null; roomCode = null; splashDone = false; overShown = false;
     askQueue.length = 0; busy = false;
+    chatLog.length = 0;
+    removeChatUI();
+  }
+
+  // ---- 聊天：可拖动小球 + 展开面板（仅联机入房后存在）----
+  const chatLog = [];        // {from, seat, text, ts}
+  let chatUnread = 0;
+  let chatEl = null;         // { ball, panel, list, input, badge }
+
+  function ensureChatUI() {
+    if (chatEl) return;
+    const ball = document.createElement('div');
+    ball.id = 'chatBall';
+    ball.innerHTML = '💬<span class="chatBadge" hidden></span>';
+    const panel = document.createElement('div');
+    panel.id = 'chatPanel';
+    panel.hidden = true;
+    panel.innerHTML = `<div class="chatHead"><span>房间聊天</span><button class="chatClose" type="button">×</button></div>`
+      + `<div class="chatList"></div>`
+      + `<div class="chatInputRow"><input class="chatInput" maxlength="100" placeholder="说点什么…（回车发送）"><button class="chatSend" type="button">发送</button></div>`;
+    document.body.appendChild(ball);
+    document.body.appendChild(panel);
+    const badge = ball.querySelector('.chatBadge');
+    const list = panel.querySelector('.chatList');
+    const input = panel.querySelector('.chatInput');
+    chatEl = { ball, panel, list, input, badge };
+
+    // 发送
+    const send = () => {
+      const text = input.value.trim();
+      if (!text || !ws || ws.readyState !== 1) return;
+      ws.send(JSON.stringify({ t: 'chat', text }));
+      input.value = '';
+    };
+    panel.querySelector('.chatSend').addEventListener('click', send);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+    panel.querySelector('.chatClose').addEventListener('click', () => togglePanel(false));
+
+    // 点击球体切换面板；拖动超过阈值视为移动而非点击（拖动后抑制紧随的 click）
+    let drag = null;
+    let suppressClick = false;
+    ball.addEventListener('pointerdown', e => {
+      const r = ball.getBoundingClientRect();
+      suppressClick = false; // 每次按下重置：抑制标志只作用于同一手势的 pointerup 后紧随的 click
+      drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
+      ball.setPointerCapture(e.pointerId);
+    });
+    ball.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      drag.moved = true;
+      const w = ball.offsetWidth, h = ball.offsetHeight;
+      const x = Math.max(4, Math.min(window.innerWidth - w - 4, drag.ox + dx));
+      const y = Math.max(4, Math.min(window.innerHeight - h - 4, drag.oy + dy));
+      ball.style.left = `${x}px`; ball.style.top = `${y}px`; ball.style.right = 'auto'; ball.style.bottom = 'auto';
+      panel.style.left = `${Math.max(4, Math.min(x + w + 8, window.innerWidth - 292))}px`;
+      panel.style.top = `${Math.max(4, Math.min(window.innerHeight - 380, y - 40))}px`;
+    });
+    ball.addEventListener('pointerup', () => {
+      if (drag && drag.moved) suppressClick = true;
+      drag = null;
+    });
+    ball.addEventListener('click', () => {
+      if (suppressClick) { suppressClick = false; return; }
+      togglePanel();
+    });
+
+    function togglePanel(force) {
+      const open = force != null ? force : panel.hidden;
+      panel.hidden = !open;
+      if (open) {
+        chatUnread = 0;
+        badge.hidden = true;
+        list.scrollTop = list.scrollHeight;
+        input.focus();
+      }
+    }
+    chatEl.togglePanel = togglePanel;
+  }
+
+  function removeChatUI() {
+    if (!chatEl) return;
+    chatEl.ball.remove();
+    chatEl.panel.remove();
+    chatEl = null;
+    chatUnread = 0;
+  }
+
+  function renderChat() {
+    if (!chatEl) return;
+    const { list, badge } = chatEl;
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+    list.innerHTML = '';
+    for (const m of chatLog) {
+      const line = document.createElement('div');
+      line.className = 'chatLine' + (m.seat === mySeat ? ' mine' : '');
+      const who = document.createElement('b');
+      who.textContent = m.from + '：';
+      line.appendChild(who);
+      line.appendChild(document.createTextNode(m.text));
+      list.appendChild(line);
+    }
+    if (atBottom) list.scrollTop = list.scrollHeight;
+    const open = !chatEl.panel.hidden;
+    if (!open && chatLog.length) {
+      chatUnread++;
+      badge.hidden = false;
+      badge.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {

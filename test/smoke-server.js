@@ -121,6 +121,23 @@ const diag = { step: '启动服务器', clients: {} };
   if (stC.snap.players.some(p => p.hand !== undefined)) throw new Error('观战者不应看到任何手牌');
   console.log('观战座位分配 ✓（加入者座位 ' + (helloC.seat + 1) + '，无手牌泄漏）');
 
+  // ---- 3.5 聊天：发送/广播/历史补发 ----
+  diag.step = '3.5聊天';
+  A.send({ t: 'chat', text: '  大家好！！  ' });
+  const chatB = await B.wait(m => m.t === 'chat');
+  if (chatB.from !== '甲' || chatB.text !== '大家好！！') throw new Error('聊天广播异常: ' + JSON.stringify(chatB));
+  await C.wait(m => m.t === 'chat');
+  B.send({ t: 'chat', text: '哈哈' });
+  await A.wait(m => m.t === 'chat' && m.from === '乙');
+  const D = makeClient('D'); await D.opened;
+  diag.clients.D = D;
+  D.send({ t: 'join', name: '丁', code });
+  await D.wait(m => m.t === 'hello');
+  const hist = await D.wait(m => m.t === 'chatLog');
+  if (!Array.isArray(hist.msgs) || hist.msgs.length < 2) throw new Error('迟到者应补发聊天历史');
+  if (hist.msgs[0].text !== '大家好！！') throw new Error('历史顺序异常');
+  console.log('聊天收发/广播/历史补发 ✓');
+
   diag.clients.C = C;
   // ---- 4. 双端持续应答直到对局推进到第 4 回合（引擎对两端的提问次数不均，不能按固定次数泵）----
   diag.step = '4.问答推进';
