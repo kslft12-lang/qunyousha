@@ -19,6 +19,14 @@
 globalThis.QYS = globalThis.QYS || {};
 QYS.data = QYS.data || {};
 
+// 闻着凑吃着香（凑鸽子）：以凑鸽子为目标时不限杀次数；次数用尽时杀只能以凑鸽子为目标
+QYS.wenzheShaLimit = (g, u) => {
+  const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
+  const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
+  if (w && w.unlimitedSha && !langyaLord) return Infinity; // 诸葛连弩：本就不限
+  return Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
+};
+
 QYS.data.cards = [
   // ---- 基本牌 ----
   {
@@ -31,20 +39,22 @@ QYS.data.cards = [
       candidates: (g, u) => {
         // 魅惑菇：被魅惑者（u.charmFrom 指向使用者）无法将其选为【杀】的目标
         const base = g.othersAlive(u).filter(t => g.inShaRange(u, t) && u.charmFrom !== t);
-        if (!g.hasSkill(u, 'sk_guantangbao')) return base;
         // 灌汤包：场上 1 血角色无视距离均可作为目标
-        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t);
-        return [...base, ...extra];
+        const extra = g.hasSkill(u, 'sk_guantangbao')
+          ? g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t)
+          : [];
+        const all = [...base, ...extra];
+        // 闻着凑吃着香：杀次数用尽时，只能以凑鸽子为目标
+        if (u.turn.shaUsed >= QYS.wenzheShaLimit(g, u)) return all.filter(t => g.hasSkill(t, 'sk_wenzhe'));
+        return all;
       },
     },
     canUse: (g, u) => {
-      const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
-      // 狼牙棒（主公技）：诸葛连弩对其无效
-      const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
-      if (w && w.unlimitedSha && !langyaLord) return true;
-      // 每回合杀上限：灌汤包 2 张；太刀黄刃（等级≥2）2 张
-      const limit = Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
-      return u.turn.shaUsed < limit;
+      if (u.turn.shaUsed >= QYS.wenzheShaLimit(g, u)) {
+        // 次数用尽：范围内仍有凑鸽子（闻着凑吃着香）→ 仍可出杀（目标被限定为凑鸽子）
+        return g.othersAlive(u).some(t => g.hasSkill(t, 'sk_wenzhe') && g.inShaRange(u, t) && u.charmFrom !== t);
+      }
+      return true;
     },
     async effect(g, { user, targets, card }) {
       const ts = targets.filter(t => t.alive);
@@ -211,6 +221,22 @@ QYS.data.cards = [
     id: 'wuxie', name: '无懈可击', type: 'trick', deckCount: 6, noPlay: true, img: true,
     desc: '一张锦囊牌生效前打出，抵消之。',
   },
+  {
+    // 臭鸡炸炸炸：不进初始牌堆，游戏开始时由凑鸽子的【臭鸡炸炸炸】技能洗入；
+    // 他人抽到时在 core.js takeDrawnCard 放回牌堆重新抽牌
+    id: 'choujizhazha', name: '臭鸡炸炸炸', type: 'trick', deckCount: 0,
+    desc: '特殊锦囊牌，只有【凑鸽子】可以使用：出牌阶段指定一名其他角色，丢弃其所有【桃】和【酒】，然后令其生命值归零（进入濒死）。其他角色抽到此牌时，将其放回牌堆并重新抽一张牌。',
+    target: { count: 1, candidates: (g, u) => g.othersAlive(u) },
+    async effect(g, { user, targets, card }) {
+      const t = targets[0];
+      if (await g.askWuxie({ user, card, target: t })) return;
+      // 先丢弃其所有桃/酒（拆掉自救手段），再令生命值归零进入濒死
+      const junks = t.hand.filter(c => ['tao', 'jiu'].includes(QYS.def(c).id));
+      for (const c of junks) g.discardFromHand(t, c, '弃置');
+      if (junks.length) g.log(`【臭鸡炸炸炸】丢弃了 ${t.name} 的 ${junks.length} 张【桃】/【酒】`, 'use');
+      await g.loseHp(t, t.hp, '臭鸡炸炸炸');
+    },
+  },
 
   // ---- 延迟锦囊 ----
   {
@@ -358,20 +384,22 @@ QYS.data.cards = [
       candidates: (g, u) => {
         // 魅惑菇：被魅惑者（u.charmFrom 指向使用者）无法将其选为【大狗叫】的目标
         const base = g.othersAlive(u).filter(t => g.inShaRange(u, t) && u.charmFrom !== t);
-        if (!g.hasSkill(u, 'sk_guantangbao')) return base;
         // 灌汤包：场上 1 血角色无视距离均可作为目标
-        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t);
-        return [...base, ...extra];
+        const extra = g.hasSkill(u, 'sk_guantangbao')
+          ? g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t)
+          : [];
+        const all = [...base, ...extra];
+        // 闻着凑吃着香：杀次数用尽时，只能以凑鸽子为目标
+        if (u.turn.shaUsed >= QYS.wenzheShaLimit(g, u)) return all.filter(t => g.hasSkill(t, 'sk_wenzhe'));
+        return all;
       },
     },
     canUse: (g, u) => {
-      const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
-      // 狼牙棒（主公技）：诸葛连弩对其无效
-      const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
-      if (w && w.unlimitedSha && !langyaLord) return true;
-      // 每回合杀上限：灌汤包 2 张；太刀黄刃（等级≥2）2 张
-      const limit = Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
-      return u.turn.shaUsed < limit;
+      if (u.turn.shaUsed >= QYS.wenzheShaLimit(g, u)) {
+        // 次数用尽：范围内仍有凑鸽子（闻着凑吃着香）→ 仍可使用（目标被限定为凑鸽子）
+        return g.othersAlive(u).some(t => g.hasSkill(t, 'sk_wenzhe') && g.inShaRange(u, t) && u.charmFrom !== t);
+      }
+      return true;
     },
     async effect(g, { user, targets, card }) {
       const ts = targets.filter(t => t.alive);
@@ -471,6 +499,7 @@ QYS.data.cards = [
       for (;;) {
         const c = g.drawCard();
         if (!c) break; // 牌堆与弃牌堆翻尽仍无该类型
+        if (c.defId === 'choujizhazha') { skipped.push(c); continue; } // 臭鸡炸炸炸不参与猴头菇检索：保持其在牌堆流转，只有凑鸽子自然摸到才能使用
         if (QYS.def(c).type === type) { got = c; break; }
         skipped.push(c);
       }

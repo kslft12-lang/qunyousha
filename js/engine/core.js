@@ -77,6 +77,9 @@ QYS.core = QYS.core || {};
     });
 
     game.deck = buildDeck();
+    // 臭鸡炸炸炸（凑鸽子）：本局游戏开始时生成一张，随机洗入抽牌堆
+    if (game.players.some(p => (p.skillIds || []).includes('sk_chouji')))
+      game.deck.splice((Math.random() * (game.deck.length + 1)) | 0, 0, { defId: 'choujizhazha', suit: SUITS[(Math.random() * 4) | 0], number: 1 + ((Math.random() * 13) | 0) });
     game.discard = [];
     game.discardInfo = new Map(); // card -> {by, via}：弃牌区悬浮提示用
     game.logs = [];
@@ -214,15 +217,25 @@ QYS.core = QYS.core || {};
         game.log(`${p.name} 的【大狗叫】触发：抽到的【杀】已转换为【大狗叫】`, 'skill');
         return true;
       }
+      // 臭鸡炸炸炸：只有凑鸽子（本角色）能持有使用；其他角色抽到 → 放回牌堆并重新抽一张
+      if (c.defId === 'choujizhazha' && p.charId !== 'cougezi') {
+        game.deck.splice((Math.random() * (game.deck.length + 1)) | 0, 0, c);
+        game.log(`${p.name} 摸到了【臭鸡炸炸炸】，无法使用，放回牌堆重新抽牌`, 'system');
+        return false;
+      }
       p.hand.push(c);
       return true;
     };
     game.drawCards = async (p, n) => {
       const got = [];
-      for (let i = 0; i < n; i++) {
+      let drawn = 0, guard = 0;
+      // 摸牌次数语义：亚撒西/orange/大狗叫的转化占一个名额（与原实现一致）；
+      // 臭鸡炸炸炸被弹回不占名额，继续补抽（guard 防牌堆只剩弹回牌时死循环）
+      while (drawn < n && guard++ < n * 3 + 12) {
         const c = game.drawCard();
-        if (!c) continue;
-        if (await game.takeDrawnCard(p, c)) got.push(c);
+        if (!c) break;
+        if (await game.takeDrawnCard(p, c)) { got.push(c); drawn++; }
+        else if (c.defId !== 'choujizhazha') drawn++;
       }
       if (got.length) { game.log(`${p.name} 摸了 ${got.length} 张牌`, 'system'); game.update(); }
       return got;
@@ -404,6 +417,14 @@ QYS.core = QYS.core || {};
     // 【杀】命中后的结算：伤害 + 麒麟弓弃马 + 太刀杀敌掉级；qg=青釭剑无视防具
     const shaHit = async (source, target, bonus, qg) => {
       await game.damage({ source, target, amount: 1 + bonus, tag: '杀', noArmor: !!qg });
+      // 焦香酥脆（凑鸽子）：被杀命中 → 伤害来源摸一张牌，自己生命上限-1（仅杀伤害触发，其他伤害不触发）
+      if (target.alive && source && source.alive && game.hasSkill(target, 'sk_jiaoxiang')) {
+        game.log(`${target.name} 的【焦香酥脆】触发：${source.name} 摸一张牌，${target.name} 生命上限-1`, 'skill');
+        await game.drawCards(source, 1);
+        target.maxHp = Math.max(1, target.maxHp - 1);
+        if (target.hp > target.maxHp) target.hp = target.maxHp;
+        game.update();
+      }
       // 麒麟弓：杀造成伤害后，可弃置目标装备区里的一张坐骑牌
       const qilin = source && source.alive && source.equips.weapon && QYS.def(source.equips.weapon).id === 'qilingong';
       if (qilin && (target.equips.horsePlus || target.equips.horseMinus || target.equips.horseExtra)) {
@@ -543,13 +564,25 @@ QYS.core = QYS.core || {};
       await game.emit('onDying', { target: t, source });
       for (const p of game.orderFrom(t)) {
         while (t.alive && t.hp <= 0) {
-          const tao = await game.askCard(p, {
-            filter: c => QYS.def(c).id === 'tao', tag: '桃',
-            hint: `${t.name} 濒死，是否使用【桃】？`, cancelText: '不救',
+          // 【桃】或【酒】均可救援（小学生战争期间按既有规则不可用）
+          const save = await game.askCard(p, {
+            filter: c => ['tao', 'jiu'].includes(QYS.def(c).id), tag: '桃',
+            hint: `${t.name} 濒死，是否使用【桃】或【酒】救助？`, cancelText: '不救',
           });
-          if (!tao || QYS.def(tao).id !== 'tao') break;
-          game.discardFromHand(p, tao, '使用');
-          await game.heal(t, 1, p);
+          if (save && ['tao', 'jiu'].includes(QYS.def(save).id)) {
+            game.discardFromHand(p, save, '使用');
+            game.log(`${p.name} 用${QYS.cardLabel(save)}救助了 ${t.name}`, 'use');
+            await game.heal(t, 1, p);
+            continue;
+          }
+          // orange 救援（秋秋人）：1 个 orange 回复 1 点体力
+          if ((p.oranges || 0) > 0 && await game.askBool(p, `是否使用 1 个 orange 救助 ${t.name}？`, { tag: '技能' })) {
+            p.oranges--;
+            game.log(`${p.name} 使用 1 个 orange 救助了 ${t.name}（剩 ${p.oranges}）`, 'skill');
+            await game.heal(t, 1, p);
+            continue;
+          }
+          break;
         }
         if (t.hp > 0) break;
       }

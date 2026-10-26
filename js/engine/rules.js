@@ -24,6 +24,8 @@ QYS.rules = {};
     // 小学生战争：被锁玩家只能使用【杀】（闪本身不可主动使用）；大狗叫拥有杀的效果，同样放行
     if (game.isLocked(p) && d.id !== 'sha' && d.id !== 'dagoujiao') return { ok: false, targets: [] };
     if (d.noPlay) return { ok: false, targets: [] };
+    // 臭鸡炸炸炸：只有凑鸽子（本角色）可以使用
+    if (d.id === 'choujizhazha' && p.charId !== 'cougezi') return { ok: false, targets: [] };
     // 无膝盖之人：无法装备坐骑
     if (d.type === 'equip' && (d.slot === 'horsePlus' || d.slot === 'horseMinus') && game.hasSkill(p, 'sk_wuxigai'))
       return { ok: false, targets: [] };

@@ -95,6 +95,7 @@ async function play(n) {
       const g5 = QYS.core.createGame({ playerCount: 5, humanSeat: null, lordSeat: 0, names: ['甲', '乙', '丙', '丁', '戊'], ioFor: io });
       const me = g5.players[0], far = g5.players[2]; // 距离2
       me.skillIds = ['sk_guantangbao'];
+      g5.players.slice(1).forEach(q => { q.skillIds = (q.skillIds || []).filter(s => s !== 'sk_wenzhe'); }); // 排除随机凑鸽子：次数用尽仍可对其出杀（闻着凑吃着香）会干扰断言
       me.turn = { shaUsed: 0, wine: false, skipPlay: false, skillUsed: false };
       const shaDef = QYS.data.cards.find(c => c.id === 'sha');
       if (!shaDef.canUse(g5, me)) throw new Error('灌汤包第一张杀应可用');
@@ -105,6 +106,7 @@ async function play(n) {
       me.equips.weapon = { defId: 'liannu', suit: '♦', number: 1 };
       if (!shaDef.canUse(g5, me)) throw new Error('连弩仍应无限出杀');
       me.equips.weapon = null;
+      me.turn.shaUsed = 0; // 候选测试需在次数未用尽状态下（闻着凑吃着香：用尽时候选仅凑鸽子）
       const noSkillCands = shaDef.target.candidates(g5, me);
       if (noSkillCands.includes(far)) throw new Error('距离2默认不可选');
       far.hp = 1;

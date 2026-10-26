@@ -575,6 +575,28 @@ QYS.data.skills = {
       },
     },
   },
+
+  // 【焦香酥脆】：被杀命中时伤害来源摸一张、自己生命上限-1。实现在 core.js shaHit（仅杀伤害触发）。
+  sk_jiaoxiang: {
+    name: '焦香酥脆',
+    type: 'trigger',
+    desc: '锁定技。当你被【杀】（含【大狗叫】）命中后，伤害来源摸一张牌，你减少1点生命上限。其他类型的伤害不触发此技能。',
+  },
+
+  // 【闻着凑吃着香】：以凑鸽子为目标时不限杀次数。实现在 cards.js 的【杀】/【大狗叫】 canUse/candidates。
+  sk_wenzhe: {
+    name: '闻着凑吃着香',
+    type: 'trigger',
+    desc: '锁定技。【杀】（含【大狗叫】）以你为目标时不受每回合使用次数限制：任意角色的【杀】次数用尽后，仍可以你为目标使用【杀】（此时【杀】只能指定你为目标）。',
+  },
+
+  // 【臭鸡炸炸炸】：游戏开始时生成一张特殊锦囊洗入牌堆（实现在 core.js createGame）；
+  // 他人抽到自动放回重抽（实现在 core.js takeDrawnCard）；只有凑鸽子能使用（实现在 rules.js playInfo）。
+  sk_chouji: {
+    name: '臭鸡炸炸炸',
+    type: 'trigger',
+    desc: '锁定技。本局游戏开始时，一张【臭鸡炸炸炸】洗入牌堆：只有你能使用它（指定一名其他角色，丢弃其所有【桃】和【酒】并令其生命值归零）；其他角色抽到时会将其放回牌堆并重新抽一张牌。',
+  },
 };
 
 QYS.data.characters = [
@@ -595,4 +617,5 @@ QYS.data.characters = [
   { id: 'pgjjj', name: '苹果酱酱酱', title: '群友', hp: 4, skills: ['sk_liugou', 'sk_sepingguo'] },
   { id: 'huluobo', name: '胡萝卜', title: '群友', hp: 4, skills: ['sk_baoweihuluobo', 'sk_cougezi', 'sk_coucoude'] },
   { id: 'sidun', name: '斯坦尊尊', title: '群友', hp: 4, skills: ['sk_dajianxia', 'sk_zhenxuzhan', 'sk_xiangsha'] },
+  { id: 'cougezi', name: '凑鸽子', title: '群友', hp: 9, skills: ['sk_jiaoxiang', 'sk_wenzhe', 'sk_chouji'] },
 ];
