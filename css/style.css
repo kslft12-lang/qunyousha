@@ -226,6 +226,12 @@ button { font-family: inherit; cursor: pointer; }
 }
 #turnInfo { color: var(--dim); }
 #turnInfo b { color: var(--gold-hi); font-size: 15px; }
+#playClock {
+  font-size: 14px; color: var(--gold-hi); letter-spacing: .05em;
+  padding: 1px 10px; border: 1px solid #e8cd7f55; border-radius: 12px;
+  background: #1c1508aa;
+}
+#playClock.urgent { color: #ffd9d3; border-color: var(--red); animation: pulse 1s infinite; }
 .discardTop { font-weight: bold; }
 #prompt {
   min-height: 22px;
@@ -499,6 +505,8 @@ button { font-family: inherit; cursor: pointer; }
 .chip.rushChip { border-color: var(--red); color: #e8a79f; }
 .chip.warChip { border-color: var(--red); color: #ffb3a7; background: #3a1a15; }
 .chip.toiletChip { border-color: #4a8a8a; color: #a7d8d8; background: #12302e; }
+.chip.liugouChip { border-color: #8a5a8a; color: #e0c0e0; background: #2e1630; }
+.chip.guardChip { border-color: #c87828; color: #ffd8a0; background: #302208; }
 .chip.charmChip { border-color: #b04a8a; color: #f0b8d8; background: #2e1230; }
 .chip.ladderChip { border-color: #8a6a4a; color: #e0c8a0; background: #2e2318; }
 #lobbyOpts { display: flex; flex-direction: column; align-items: center; gap: 14px; }

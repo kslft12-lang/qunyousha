@@ -42,7 +42,7 @@ QYS.ui.create = function (root) {
         <div id="fallenRow"></div>
         <div id="seal"></div>
         <div id="ring"></div>
-        <div id="centerBar"><div id="turnInfo"></div><div id="prompt"></div></div>
+        <div id="centerBar"><div id="turnInfo"></div><div id="playClock" hidden></div><div id="prompt"></div></div>
         <div id="discardCorner"></div>
         <div id="selfArea"></div>
       </div>
@@ -54,7 +54,7 @@ QYS.ui.create = function (root) {
 
   const $ = s => root.querySelector(s);
   const gameScreen = $('#gameScreen'), ring = $('#ring'), seal = $('#seal'),
-    turnInfo = $('#turnInfo'), promptEl = $('#prompt'), idStats = $('#idStats'),
+    turnInfo = $('#turnInfo'), playClockEl = $('#playClock'), promptEl = $('#prompt'), idStats = $('#idStats'),
     fallenRow = $('#fallenRow'), discardCorner = $('#discardCorner'),
     selfArea = $('#selfArea'), logList = $('#logList'), actionBar = $('#actionBar'),
     cardDetail = $('#cardDetail'), overlay = $('#overlay');
@@ -86,6 +86,7 @@ QYS.ui.create = function (root) {
     if (eq.armor) chips.push('防·' + dn(eq.armor));
     if (eq.horsePlus) chips.push('+1马');
     if (eq.horseMinus) chips.push('-1马');
+    if (eq.horseExtra) chips.push('马·' + dn(eq.horseExtra)); // 凑凑的：第二坐骑栏
     p.judges.forEach(c => chips.push('判·' + dn(c)));
     return chips.map(c => `<span class="chip">${c}</span>`).join('');
   }
@@ -98,7 +99,7 @@ QYS.ui.create = function (root) {
   // 悬于角色下方的牌：装备与判定区（延迟锦囊）
   function hangFaces(p) {
     const eq = p.equips;
-    const cards = [eq.weapon, eq.armor, eq.horsePlus, eq.horseMinus, ...p.judges].filter(Boolean);
+    const cards = [eq.weapon, eq.armor, eq.horsePlus, eq.horseMinus, eq.horseExtra, ...p.judges].filter(Boolean);
     return cards.map(c => faceHtml(c, '', 'hang')).join('');
   }
 
@@ -117,6 +118,8 @@ QYS.ui.create = function (root) {
     const ch = charOf(p);
     const locked = g.isLocked ? g.isLocked(p) : !!p.locked;
     const inToilet = g.toilet ? (g.toilet.a === p || g.toilet.b === p) : !!p.toilet;
+    const inLiugou = g.liugou ? (g.liugou.a === p || g.liugou.b === p) : !!p.liugou;
+    const distGuarded = p.distGuardTurn === g.turnCount || !!p.distGuard;
     const charmed = !!p.charmFrom || !!p.charmed;
     const laddered = !!p.ladderFail || !!p.ladder;
     const ringCls = ringPos ? ' ringP' : '';
@@ -135,7 +138,7 @@ QYS.ui.create = function (root) {
         <div class="ptitle">${ch ? `${ch.name} · ${ch.title}` : p.title}</div>
         <div class="hp">${hpHtml(p)}</div>
         <div class="handcount">手牌 ${p.handCount ?? p.hand.length}</div>
-        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${charmed ? '<span class="chip charmChip">魅惑菇</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
+        <div class="chips">${tagChips(p)}${locked ? '<span class="chip warChip">小学生战争</span>' : ''}${inToilet ? '<span class="chip toiletChip">一起上厕所</span>' : ''}${inLiugou ? '<span class="chip liugouChip">遛狗去咯</span>' : ''}${distGuarded ? '<span class="chip guardChip">保卫胡萝卜</span>' : ''}${charmed ? '<span class="chip charmChip">魅惑菇</span>' : ''}${laddered ? '<span class="chip ladderChip">梯子专家</span>' : ''}</div>
         <div class="skRow"><span class="lbl">技能</span>${skChips || '<span class="lbl">无</span>'}</div>
       </div>
       ${hang ? `<div class="hangRow">${hang}</div>` : ''}
@@ -188,6 +191,17 @@ QYS.ui.create = function (root) {
     return '';
   }
 
+  // 出牌倒计时：所有人可见（中心栏显示剩余秒数，最后 10 秒红色警示）
+  function renderClock() {
+    const g = view.game;
+    const dl = g && !g.over ? g.playDeadline : null;
+    if (!dl) { playClockEl.hidden = true; return; }
+    const secs = Math.max(0, Math.ceil((dl - Date.now()) / 1000));
+    playClockEl.hidden = false;
+    playClockEl.textContent = `⏱ 出牌倒计时 ${secs} 秒`;
+    playClockEl.classList.toggle('urgent', secs <= 10);
+  }
+
   function render() {
     const g = view.game;
     if (!g) return;
@@ -227,6 +241,7 @@ QYS.ui.create = function (root) {
     turnInfo.innerHTML = g.over
       ? `终局 · ${g.winner === '平局' || !g.winner ? '平局' : g.winner + '获胜'}`
       : `<b>${cur ? cur.name : ''}</b> 的回合${cur && cur.seat === g.humanSeat ? '（你）' : ''} · 牌堆 ${g.deckCount ?? g.deck.length} · 弃牌 ${entries.length}`;
+    renderClock();
     seal.innerHTML = g.over ? `<div class="seal over">终</div>` : `<div class="seal">${g.phase || '歇'}</div>`;
     promptEl.textContent = view.state?.hint || '';
 
@@ -275,12 +290,14 @@ QYS.ui.create = function (root) {
       return ask('play', {
         playableKeys: new Set(opts.playable.map(it => cardKey(it.card))),
         canSkill: opts.canSkill, skillName: opts.skillName, hint: opts.hint || '',
+        deadline: view.game?.playDeadline ?? null, // 出牌倒计时到期时自动"结束出牌"
       });
     },
     async chooseTargets(p, opts) {
       return ask('targets', {
         candidates: opts.candidates, selected: [],
         min: opts.min ?? 1, max: opts.max ?? 1, hint: opts.hint || '',
+        deadline: view.game?.phase === '出牌' ? (view.game.playDeadline ?? null) : null, // 仅出牌阶段内的选目标受倒计时约束
       });
     },
     async chooseBool(p, opts) {
@@ -444,6 +461,22 @@ QYS.ui.create = function (root) {
       if (view.game) render();
     }, 120);
   });
+
+  // 出牌倒计时心跳：只刷时钟文本（整页 render 会重建 DOM 吞掉 hover）。
+  // 出牌阶段的问答（askPlay / 选目标）在创建时带上 playDeadline 标记，
+  // 到期自动替人类玩家"结束出牌"；其他阶段的问答不受影响。
+  setInterval(() => {
+    renderClock();
+    const st = view.state;
+    const g = view.game;
+    if (!st || !g) return;
+    if (st.mode === 'play') {
+      const expired = st.deadline ? Date.now() >= st.deadline : g.phase !== '出牌';
+      if (expired) resolveSt({ type: 'end' });
+    } else if (st.mode === 'targets' && st.deadline && Date.now() >= st.deadline) {
+      resolveSt(null);
+    }
+  }, 500);
 
   // ---- 流程弹层 ----
   view.attach = (g, remote = false) => {

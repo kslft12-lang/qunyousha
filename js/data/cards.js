@@ -320,6 +320,90 @@ QYS.data.cards = [
     id: 'jinzhengu', name: '金针菇', type: 'curse', deckCount: 0, noPlay: true, art: 'curse',
     desc: '诅咒牌。无法使用、打出或弃置，计入手牌上限；经过你自己的三个回合后自动移出游戏。你被【一起上厕所】选为目标时，其立即移出。只能通过【金针菇】技能进入手牌，移出后不进弃牌堆。',
   },
+  // ---- 诅咒牌：叫叫叫（类似金针菇，持有者抽牌数-1，使用效果不同）----
+  {
+    id: 'jiaojiaojiao', name: '叫叫叫', type: 'curse', deckCount: 0, noPlay: true,
+    desc: '诅咒牌。无法丢弃，持有时抽牌数减一。使用时需弃置一张牌并失去一滴血。只能通过大神的技能获取。',
+    canUse: (g, u) => u.hand.some(c => c.defId !== 'jiaojiaojiao'), // 必须有一张非叫叫叫的牌
+    async effect(g, { user, card }) {
+      // 先弃置一张牌
+      const discardCandidate = user.hand.find(c => c.defId !== 'jiaojiaojiao');
+      if (!discardCandidate) return;
+      const c = await g.askCard(user, { 
+        filter: card => card.defId !== 'jiaojiaojiao', 
+        tag: '弃牌', 
+        hint: '【叫叫叫】：必须弃置一张非叫叫叫的手牌',
+        cancelText: '随机弃一张'
+      });
+      const toDiscard = c && user.hand.includes(c) ? c : discardCandidate;
+      g.discardFromHand(user, toDiscard, '弃置');
+      g.log(`${user.name} 发动【叫叫叫】，弃置了${QYS.cardLabel(toDiscard)}`, 'use');
+      // 失去一滴血
+      await g.loseHp(user, 1, '叫叫叫');
+    },
+  },
+
+  // ---- 基本牌：大狗叫（大神专用）----
+  {
+    id: 'dagoujiao', name: '大狗叫', type: 'basic', deckCount: 0, img: true,
+    desc: '基本牌，只能通过大神的技能获取。效果与【杀】相同，并且当此牌未被【闪】抵消时，往目标手牌加入一张【大狗叫】。',
+    target: {
+      count: 1,
+      // 方天画戟：此【大狗叫】为最后一张手牌时可指定至多 3 名目标
+      max: (g, u) => u.equips.weapon && QYS.def(u.equips.weapon).id === 'fangtian' && u.hand.length === 1 ? 3 : 1,
+      candidates: (g, u) => {
+        // 魅惑菇：被魅惑者（u.charmFrom 指向使用者）无法将其选为【大狗叫】的目标
+        const base = g.othersAlive(u).filter(t => g.inShaRange(u, t) && u.charmFrom !== t);
+        if (!g.hasSkill(u, 'sk_guantangbao')) return base;
+        // 灌汤包：场上 1 血角色无视距离均可作为目标
+        const extra = g.othersAlive(u).filter(t => t.hp === 1 && !base.includes(t) && u.charmFrom !== t);
+        return [...base, ...extra];
+      },
+    },
+    canUse: (g, u) => {
+      const w = u.equips.weapon ? QYS.def(u.equips.weapon) : null;
+      // 狼牙棒（主公技）：诸葛连弩对其无效
+      const langyaLord = u.identity === '主' && g.hasSkill(u, 'sk_langyabang');
+      if (w && w.unlimitedSha && !langyaLord) return true;
+      // 每回合杀上限：灌汤包 2 张；太刀黄刃（等级≥2）2 张
+      const limit = Math.max(g.hasSkill(u, 'sk_guantangbao') ? 2 : 1, g.hasSkill(u, 'sk_taidao') && (u.blade || 0) >= 2 ? 2 : 1);
+      return u.turn.shaUsed < limit;
+    },
+    async effect(g, { user, targets, card }) {
+      const ts = targets.filter(t => t.alive);
+      // 太刀高手：每使用一次杀永久升级（无→白刃→黄刃→红刃，升级当次即生效；多人目标也只升一次）
+      if (g.hasSkill(user, 'sk_taidao') && user.blade < 3) {
+        user.blade++;
+        g.log(`【太刀高手】${user.name} 的太刀升至 ${['无', '白刃（攻击范围+1）', '黄刃（每回合两张杀）', '红刃（杀伤害+1）'][user.blade]}`, 'skill');
+      }
+      // 狼牙棒（主公技）杀伤害+1；太刀红刃（等级3）杀伤害+1
+      const langya = user.identity === '主' && g.hasSkill(user, 'sk_langyabang') ? 1 : 0;
+      const bladeDmg = g.hasSkill(user, 'sk_taidao') && user.blade >= 3 ? 1 : 0;
+      const base = (user.turn.wine ? 1 : 0) + langya + bladeDmg;
+      // 灌汤包摸牌条件取"使用时目标为1血"，命中未被闪避即摸（多人目标命中任意一名即摸一张）
+      const guantang = g.hasSkill(user, 'sk_guantangbao') && ts.some(t => t.hp === 1);
+      user.turn.wine = false;
+      user.turn.shaUsed++;
+      let anyHit = false;
+      for (const tgt of ts) {
+        if (g.over) break;
+        // 古锭刀：对已受伤角色的杀伤害+1
+        const guding = user.equips.weapon && QYS.def(user.equips.weapon).id === 'gudingdao' && tgt.hp < tgt.maxHp ? 1 : 0;
+        const dodged = !(await g.shaResolve(user, tgt, base + guding, card));
+        if (!dodged) {
+          anyHit = true;
+          // 大狗叫额外效果：未被闪时往对方手牌增加一张大狗叫
+          tgt.hand.push({
+            defId: 'dagoujiao',
+            suit: ['♠', '♥', '♣', '♦'][(Math.random() * 4) | 0],
+            number: 1 + ((Math.random() * 13) | 0),
+          });
+          g.log(`${tgt.name} 被【大狗叫】命中，手牌中被塞入一张【大狗叫】`, 'skill');
+        }
+      }
+      if (guantang && anyHit) await g.drawCards(user, 1);
+    },
+  },
   {
     id: 'mehuogu', name: '魅惑菇', type: 'trick', deckCount: 3, art: 'shroom',
     desc: '出牌阶段，对你的攻击范围内的一名其他角色使用：直到其下个回合结束，其无法将你选为【杀】的目标。',

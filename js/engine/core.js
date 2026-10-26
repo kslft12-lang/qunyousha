@@ -61,7 +61,7 @@ QYS.core = QYS.core || {};
         seat, identity, charId: ch.id, charName: ch.name, name: (names && names[seat]) || ch.name,
         title: ch.title, skillIds: ch.skills,
         maxHp, hp: maxHp,
-        hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null }, judges: [],
+        hand: [], equips: { weapon: null, armor: null, horsePlus: null, horseMinus: null, horseExtra: null }, judges: [],
         oranges: 0,          // orange 计数（秋秋人）
         blade: 0,            // 太刀等级 0无 1白刃 2黄刃 3红刃（花生酱酱酱）
         cockroachUsed: false, // 蟑螂回魂是否已用（好像有一天）
@@ -79,10 +79,12 @@ QYS.core = QYS.core || {};
     game.turnCount = 0;
     game.currentIdx = 0;
     game.phase = null;
+    game.playDeadline = null; // 出牌阶段倒计时死线（毫秒时间戳），阶段结束清除
     game.over = false;
     game.winner = null;
     game.warLock = null; // 小学生战争：{a, b} 被锁的双方
     game.toilet = null;  // 一起上厕所：{a, b} 距离强制为1的双方（a 为发动者）
+    game.liugou = null;  // 遛狗去咯：{a, b} 本回合不可被选中的双方（回合结束清除）
     game.view = null; // 由界面层注入 { render() }
 
     // 小学生战争生效中：p 是被锁的一方（只能用/打出【杀】【闪】）
@@ -182,7 +184,7 @@ QYS.core = QYS.core || {};
       }
       return game.deck.pop();
     };
-    // 单张牌"抽到"入手（含亚撒西/orange 的抽到转化）；返回 false 表示已转化未入手。
+// 单张牌"抽到"入手（含亚撒西/orange 的抽到转化）；返回 false 表示已转化未入手。
     // drawCards 与猴头菇的定向抽取共用，保证转化技能对所有抽牌生效。
     game.takeDrawnCard = async (p, c) => {
       // 【亚撒西】抽到杀 → 弃置并改为摸两张（每回合限一次）
@@ -197,7 +199,18 @@ QYS.core = QYS.core || {};
       if (game.hasSkill(p, 'sk_orange') && c.defId === 'tao') {
         p.oranges = (p.oranges || 0) + 2;
         game.toDiscard(c, p, '转化');
-        game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges}）`, 'skill');
+        game.log(`${p.name} 的【orange】触发：弃置${QYS.cardLabel(c)}，获得 2 个 orange（共 ${p.oranges})`, 'skill');
+        return false;
+      }
+      // 【大狗叫】：抽到的杀自动转换为大狗叫
+      if (game.hasSkill(p, 'sk_dagoujiao') && c.defId === 'sha') {
+        const newCard = {
+          defId: 'dagoujiao',
+          suit: c.suit,
+          number: c.number,
+        };
+        p.hand.push(newCard);
+        game.log(`${p.name} 的【大狗叫】触发：抽到的【杀】已转换为【大狗叫】`, 'skill');
         return false;
       }
       p.hand.push(c);
@@ -224,14 +237,19 @@ QYS.core = QYS.core || {};
     // ---- 距离与范围 ----
     // 环距离在"存活玩家环"上计算：阵亡者离场、座位收拢（三国杀规则）
     game.distance = (a, b) => {
+      // 保卫胡萝卜：本回合内该角色与所有角色距离强制为 1（被杀指定为目标后触发）
+      if (a.distGuardTurn === game.turnCount || b.distGuardTurn === game.turnCount) return 1;
       // 一起上厕所：双方距离互相强制为 1（无视实际环距与坐骑）
       if (game.toilet && ((game.toilet.a === a && game.toilet.b === b) || (game.toilet.a === b && game.toilet.b === a))) return 1;
       const alive = game.players.filter(p => p.alive);
       const n = alive.length;
       const ia = alive.indexOf(a), ib = alive.indexOf(b);
       let d = n > 1 ? Math.min(Math.abs(ia - ib), n - Math.abs(ia - ib)) : 1;
-      if (b.equips.horsePlus) d += 1;
-      if (a.equips.horseMinus) d -= 1;
+      // 坐骑按张数累计：+1马（ma_def）各+1、-1马（ma_atk）各-1；凑凑的可装备两张坐骑（第二张在 horseExtra 栏）
+      for (const c of [b.equips.horsePlus, b.equips.horseMinus, b.equips.horseExtra])
+        if (c && QYS.def(c).id === 'ma_def') d += 1;
+      for (const c of [a.equips.horsePlus, a.equips.horseMinus, a.equips.horseExtra])
+        if (c && QYS.def(c).id === 'ma_atk') d -= 1;
       return Math.max(1, d);
     };
     game.inShaRange = (a, b) => {
@@ -272,6 +290,8 @@ QYS.core = QYS.core || {};
     };
     game.askTargets = async (p, opts) => {
       opts.candidates = opts.candidates.filter(q => q.alive);
+      // 遛狗去咯：被保护的两名角色本回合不可被任何卡牌/技能选中
+      if (game.liugou) opts.candidates = opts.candidates.filter(q => q !== game.liugou.a && q !== game.liugou.b);
       if (!opts.candidates.length || !p.io) return null;
       return p.io.chooseTargets(p, opts);
     };
@@ -315,7 +335,17 @@ QYS.core = QYS.core || {};
         if (j.color === 'red') { game.log(`八卦阵判定为红色，视为打出【闪】`, 'use'); game.update(); return true; }
       }
       const shan = await game.askResponse(target, '闪');
-      if (shan) { game.discardFromHand(target, shan, '打出'); game.log(`${target.name} 打出了【闪】`, 'use'); game.update(); return true; }
+      if (shan) {
+        game.discardFromHand(target, shan, '打出');
+        game.log(`${target.name} 打出了【闪】`, 'use');
+        // 凑鸽子：使用【闪】令【杀】无效后摸一张牌（万箭齐发不算杀）
+        if (cause === 'sha' && game.hasSkill(target, 'sk_cougezi')) {
+          game.log(`${target.name} 的【凑鸽子】触发`, 'skill');
+          await game.drawCards(target, 1);
+        }
+        game.update();
+        return true;
+      }
 
       // 【一几一几】：仅被【杀】指定为目标时可把任意手牌当【闪】（万箭齐发、被万人迷选中代打均不触发）
       if (game.hasSkill(target, 'sk_yijiyiji') && cause === 'sha' && target.hand.length) {
@@ -373,10 +403,10 @@ QYS.core = QYS.core || {};
       await game.damage({ source, target, amount: 1 + bonus, tag: '杀', noArmor: !!qg });
       // 麒麟弓：杀造成伤害后，可弃置目标装备区里的一张坐骑牌
       const qilin = source && source.alive && source.equips.weapon && QYS.def(source.equips.weapon).id === 'qilingong';
-      if (qilin && (target.equips.horsePlus || target.equips.horseMinus)) {
+      if (qilin && (target.equips.horsePlus || target.equips.horseMinus || target.equips.horseExtra)) {
         if (await game.askBool(source, `发动【麒麟弓】？弃置 ${target.name} 装备区里的一张坐骑牌`, { tag: '技能' })) {
-          // TODO(规则): 目标有两匹马时应让使用者任选，这里随机弃一
-          const slots = ['horsePlus', 'horseMinus'].filter(s => target.equips[s]);
+          // TODO(规则): 目标有多匹马时应让使用者任选，这里随机弃一
+          const slots = ['horsePlus', 'horseMinus', 'horseExtra'].filter(s => target.equips[s]);
           const slot = slots[(Math.random() * slots.length) | 0];
           const c = target.equips[slot];
           target.equips[slot] = null;
@@ -592,6 +622,7 @@ QYS.core = QYS.core || {};
       identityCounts: { ...game.identityCounts },
       over: game.over, winner: game.winner, phase: game.phase,
       currentIdx: game.currentIdx, turnCount: game.turnCount,
+      playDeadline: game.playDeadline ?? null,
       deckCount: game.deck.length,
       logs: game.logs.slice(0, 60),
       discardEntries: game.discard.slice().reverse().map(c => {
@@ -606,6 +637,8 @@ QYS.core = QYS.core || {};
         oranges: p.oranges || 0,
         blade: p.blade || 0,
         toilet: !!(game.toilet && (game.toilet.a === p || game.toilet.b === p)),
+        liugou: !!(game.liugou && (game.liugou.a === p || game.liugou.b === p)),
+        distGuard: p.distGuardTurn === game.turnCount,
         charmed: !!p.charmFrom,
         ladder: !!p.ladderFail,
         locked: game.isLocked(p),

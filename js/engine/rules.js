@@ -5,6 +5,19 @@ QYS.rules = {};
 (function () {
   const def = c => QYS.def(c);
 
+  // 出牌阶段总限时（秒），超时自动结束出牌；测试可覆盖 game.playTimeLimit
+  const PLAY_LIMIT = 90;
+
+  // 选目标超时标记（与玩家取消返回 null 区分）
+  const PLAY_TIMEOUT = { playTimeout: true };
+
+  // 给 Promise 加限时：超时返回 fallback；无论谁先完成都清理定时器，避免残留 timer 拖住进程
+  const raceTimeout = (promise, ms, fallback) => {
+    let timer;
+    const t = new Promise(res => { timer = setTimeout(() => res(fallback), ms); });
+    return Promise.race([promise, t]).finally(() => clearTimeout(timer));
+  };
+
   // 某张牌在出牌阶段能否被使用，以及合法目标
   QYS.rules.playInfo = function (game, p, card) {
     const d = def(card);
@@ -13,6 +26,9 @@ QYS.rules = {};
     if (d.noPlay) return { ok: false, targets: [] };
     // 无膝盖之人：无法装备坐骑
     if (d.type === 'equip' && (d.slot === 'horsePlus' || d.slot === 'horseMinus') && game.hasSkill(p, 'sk_wuxigai'))
+      return { ok: false, targets: [] };
+    // 凑凑的：无法装备防具
+    if (d.type === 'equip' && d.slot === 'armor' && game.hasSkill(p, 'sk_coucoude'))
       return { ok: false, targets: [] };
     if (d.type === 'equip') return { ok: true, targets: [] };
     if (d.type === 'delayed') {
@@ -65,9 +81,12 @@ QYS.rules = {};
     game.update();
 
     if (d.type === 'equip') {
-      const old = user.equips[d.slot];
+      // 凑凑的：坐骑主栏已占用时装备到第二坐骑栏（horseExtra）
+      let slot = d.slot;
+      if ((slot === 'horsePlus' || slot === 'horseMinus') && user.equips[slot] && game.hasSkill(user, 'sk_coucoude')) slot = 'horseExtra';
+      const old = user.equips[slot];
       if (old) { game.toDiscard(old, user, '被替换'); game.loseEquip(user, old); }
-      user.equips[d.slot] = card;
+      user.equips[slot] = card;
       game.log(`${user.name} 装备了【${d.name}】`, 'use');
       game.update();
       return;
@@ -87,40 +106,57 @@ QYS.rules = {};
   }
 
   async function playPhase(game, p) {
-    while (!game.over && p.alive && !p.turn.skipPlay) {
-      const playable = collectPlayables(game, p);
-      const sk = activeSkill(game, p);
-      game.update();
-      const act = await p.io.askPlay(p, {
-        playable, canSkill: !!sk, skillName: sk?.name,
-        hint: '出牌阶段：点击手牌使用，或结束出牌',
-      });
-      if (!act || act.type === 'end') break;
-      if (act.type === 'skill') { await useSkill(game, p); continue; }
-
-      const card = act.card;
-      if (!p.hand.includes(card)) continue;
-      // 梯子专家：被盯上的角色本回合使用任意卡牌有一半概率失败（出牌阶段走 askPlay，不经 askCard，需在此判定）
-      if (p.ladderFail && Math.random() < 0.5) {
-        game.log(`${p.name} 的${QYS.cardLabel(card)}因【梯子专家】造成的网络波动而使用失败`, 'skill');
+    // 出牌倒计时：整个出牌阶段共享一个死线（进阶段起算），所有人都可通过 game.playDeadline 看到
+    game.playDeadline = Date.now() + (game.playTimeLimit ?? PLAY_LIMIT) * 1000;
+    game.update();
+    try {
+      while (!game.over && p.alive && !p.turn.skipPlay) {
+        const remain = game.playDeadline - Date.now();
+        if (remain <= 0) { game.log(`${p.name} 出牌时间到，自动结束出牌阶段`, 'system'); break; }
+        const playable = collectPlayables(game, p);
+        const sk = activeSkill(game, p);
         game.update();
-        continue;
+        const act = await raceTimeout(
+          p.io.askPlay(p, {
+            playable, canSkill: !!sk, skillName: sk?.name,
+            hint: '出牌阶段：点击手牌使用，或结束出牌',
+          }),
+          remain, { type: 'end' }, // 超时视同"结束出牌"
+        );
+        if (!act || act.type === 'end') break;
+        if (act.type === 'skill') { await useSkill(game, p); continue; }
+
+        const card = act.card;
+        if (!p.hand.includes(card)) continue;
+        // 梯子专家：被盯上的角色本回合使用任意卡牌有一半概率失败（出牌阶段走 askPlay，不经 askCard，需在此判定）
+        if (p.ladderFail && Math.random() < 0.5) {
+          game.log(`${p.name} 的${QYS.cardLabel(card)}因【梯子专家】造成的网络波动而使用失败`, 'skill');
+          game.update();
+          continue;
+        }
+        const info = QYS.rules.playInfo(game, p, card);
+        if (!info.ok) continue;
+        let targets = [];
+        if (info.targets.length) {
+          const d = def(card);
+          const cnt = d.target?.count ?? 1;
+          const maxT = d.target?.max ? d.target.max(game, p, card) : cnt; // 方天画戟：最后一张手牌的杀至多 3 目标
+          const sel = await raceTimeout(
+            game.askTargets(p, {
+              candidates: info.targets, min: cnt, max: maxT,
+              hint: maxT > cnt ? `请为【${d.name}】选择目标（可至多 ${maxT} 名）` : `请为【${d.name}】选择目标`,
+            }),
+            Math.max(0, game.playDeadline - Date.now()), PLAY_TIMEOUT, // 选目标同样受总时限约束
+          );
+          if (sel === PLAY_TIMEOUT) { game.log(`${p.name} 出牌时间到，自动结束出牌阶段`, 'system'); break; }
+          if (!sel || !sel.length) continue; // 取消则回到出牌
+          targets = sel;
+        }
+        await playCard(game, p, card, targets);
       }
-      const info = QYS.rules.playInfo(game, p, card);
-      if (!info.ok) continue;
-      let targets = [];
-      if (info.targets.length) {
-        const d = def(card);
-        const cnt = d.target?.count ?? 1;
-        const maxT = d.target?.max ? d.target.max(game, p, card) : cnt; // 方天画戟：最后一张手牌的杀至多 3 目标
-        const sel = await game.askTargets(p, {
-          candidates: info.targets, min: cnt, max: maxT,
-          hint: maxT > cnt ? `请为【${d.name}】选择目标（可至多 ${maxT} 名）` : `请为【${d.name}】选择目标`,
-        });
-        if (!sel || !sel.length) continue; // 取消则回到出牌
-        targets = sel;
-      }
-      await playCard(game, p, card, targets);
+    } finally {
+      game.playDeadline = null; // 出牌阶段结束，清除倒计时
+      game.update();
     }
   }
 
@@ -186,8 +222,17 @@ QYS.rules = {};
       await game.emit('phaseStart', { player: p, phase: ph });
       if (ph === '判定') await judgePhase(game, p);
       else if (ph === '摸牌') {
-        if (p.turn.skipDraw) game.log(`${p.name} 跳过摸牌阶段（兵粮寸断）`, 'system');
-        else await game.drawCards(p, game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2);
+        if (p.turn.skipDraw) game.log(`${p.name} 跳过摸牌阶段`, 'system');
+        else {
+          // 基础摸牌数：小笼包技能额外+1
+          let drawCount = game.hasSkill(p, 'sk_xiaolongbao') ? 3 : 2;
+          // 叫叫叫诅咒牌：持有者抽牌数-1
+          if (p.hand.some(c => c.defId === 'jiaojiaojiao')) {
+            drawCount = Math.max(drawCount - 1, 1); // 至少摸1张
+            game.log(`${p.name} 持有【叫叫叫】诅咒牌，抽牌数-1`, 'skill');
+          }
+          await game.drawCards(p, drawCount);
+        }
       }
       else if (ph === '出牌') {
         if (p.turn.skipPlay) game.log(`${p.name} 跳过出牌阶段`, 'system');
@@ -198,6 +243,7 @@ QYS.rules = {};
     }
     game.phase = null;
     if (p.charmFrom) p.charmFrom = null; // 【魅惑菇】：目标回合结束时解除
+    game.liugou = null; // 【遛狗去咯】：保护只持续到本回合结束
   }
 
   QYS.rules.run = async function (game) {

@@ -415,6 +415,106 @@ QYS.data.skills = {
       },
     },
   },
+
+  // 【大狗叫】：抽到的【杀】自动转换为【大狗叫】
+  sk_dagoujiao: {
+    name: '大狗叫',
+    type: 'trigger',
+    desc: '抽到的【杀】自动转换为【大狗叫】',
+  },
+
+  // 【遛狗去咯】：主动技。出牌阶段选择一名其他角色：本回合内你与该角色都无法被任何卡牌或技能选为目标。
+  // 保护过滤实现在 core.js askTargets（所有选人问答的必经之路）；冷却在 turnStart 递减。
+  sk_liugou: {
+    name: '遛狗去咯',
+    type: 'active',
+    freq: 'oncePerTurn',
+    desc: '出牌阶段限一次，你可以选择一名其他角色：直到本回合结束，你与该角色都无法被任何卡牌或技能选为目标。发动后冷却两回合。',
+    canUse(game, p) {
+      return !game.liugou && (p.liugouCd || 0) === 0 && game.othersAlive(p).length > 0;
+    },
+    async exec(game, p) {
+      const sel = await game.askTargets(p, {
+        candidates: game.othersAlive(p), min: 1, max: 1,
+        hint: '【遛狗去咯】：选择一起遛狗的角色（本回合内你们二人都不可被选中）',
+      });
+      if (!sel || !sel.length) return false;
+      game.liugou = { a: p, b: sel[0] };
+      p.liugouCd = 2;
+      game.log(`${p.name} 拉着 ${sel[0].name} 遛狗去咯！本回合内你们二人都不可被选中`, 'skill');
+      game.update();
+      return true;
+    },
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player === p && p.liugouCd > 0) p.liugouCd--;
+      },
+    },
+  },
+
+  // 【涩苹果】：每回合开始时二选一：额外摸一张牌；或放弃本回合摸牌阶段，改为从两名其他角色处各拿取一张牌。
+  sk_sepingguo: {
+    name: '涩苹果',
+    type: 'trigger',
+    desc: '锁定技。每回合开始时，你须选择一项：1.额外摸一张牌；2.放弃本回合的摸牌阶段，改为选择两名其他角色，各拿取其区域里的一张牌。',
+    hooks: {
+      async turnStart(game, p, payload) {
+        if (payload.player !== p) return;
+        const extra = await game.askBool(p, '【涩苹果】：【确定】额外摸一张牌；【放弃】改为放弃本回合摸牌，从两名其他角色处各拿取一张牌', { tag: '技能' });
+        if (extra) { await game.drawCards(p, 1); return; }
+        p.turn.skipDraw = true;
+        const cands = game.othersAlive(p).filter(t => game.anyCards(t));
+        if (!cands.length) { game.log(`${p.name} 的【涩苹果】：场上无牌可拿`, 'system'); return; }
+        const sel = await game.askTargets(p, {
+          candidates: cands, min: Math.min(2, cands.length), max: 2,
+          hint: '【涩苹果】：选择两名角色，各拿取其区域里的一张牌',
+        });
+        if (!sel || !sel.length) return;
+        for (const t of sel) {
+          if (!t.alive) continue;
+          const pick = game.randomZoneCard(t);
+          if (!pick) continue;
+          game.removeZoneCard(t, pick);
+          p.hand.push(pick.card);
+          game.log(`${p.name} 拿取了 ${t.name} 区域的${QYS.cardLabel(pick.card)}`, 'use');
+        }
+        game.update();
+      },
+    },
+  },
+
+  // 【保卫胡萝卜】：成为【杀】的目标后，本回合内其与所有角色的距离强制为1。实现在 core.js distance。
+  sk_baoweihuluobo: {
+    name: '保卫胡萝卜',
+    type: 'trigger',
+    desc: '锁定技。当你成为【杀】（含【大狗叫】）的目标后，直到本回合结束，你与其他所有角色的距离强制为1。',
+    hooks: {
+      becomeTarget(game, p, payload) {
+        if (payload.target !== p || !payload.card) return;
+        const d = QYS.def(payload.card);
+        if (d.id !== 'sha' && d.id !== 'dagoujiao') return;
+        if (p.distGuardTurn === game.turnCount) return; // 本回合只标记一次
+        p.distGuardTurn = game.turnCount;
+        game.log(`${p.name} 的【保卫胡萝卜】触发：直到本回合结束，其与所有角色的距离强制为1`, 'skill');
+        game.update();
+      },
+    },
+  },
+
+  // 【凑鸽子】：使用【闪】令【杀】无效后抽一张牌。实现在 core.js dodgeCheck。
+  sk_cougezi: {
+    name: '凑鸽子',
+    type: 'trigger',
+    desc: '当你使用【闪】令一张【杀】对你无效后，你摸一张牌。',
+  },
+
+  // 【凑凑的】：不能装备防具，但可以装备两个坐骑。
+  // 防具禁用实现在 rules.js playInfo；第二坐骑栏实现在 rules.js playCard 与 core.js distance。
+  sk_coucoude: {
+    name: '凑凑的',
+    type: 'trigger',
+    desc: '锁定技。你不能装备防具；你的防具栏改为第二个坐骑栏，可以同时装备两个坐骑（如两张+1马）。',
+  },
 };
 
 QYS.data.characters = [
@@ -424,7 +524,7 @@ QYS.data.characters = [
   { id: 'hxtyd', name: '好像有一天', title: '谜之群友', hp: 5, avatar: 'jpeg', skills: ['sk_xueshengzhanzheng', 'sk_yinpa', 'sk_zhanglang'] },
   { id: 'hsjjj', name: '花生酱酱酱', title: '群友', hp: 4, skills: ['sk_yijiyiji', 'sk_wuxigai', 'sk_taidao'] },
   { id: 'hhdmw', name: '善良的黄瓜魔女', title: '群友', hp: 4, avatar: 'jpeg', skills: ['sk_wuwuwuwa', 'sk_yinshen', 'sk_xiangxiang'] },
-  { id: 'dashen', name: '大神', title: '群友', hp: 5, skills: ['sk_wanrenmi'] },
+  { id: 'dashen', name: '大神', title: '群友', hp: 5, skills: ['sk_wanrenmi', 'sk_dagoujiao'] },
   { id: 'baozi', name: '包子大王', title: '群友', hp: 4, avatar: 'png', skills: ['sk_doushabao', 'sk_xiaolongbao', 'sk_guantangbao'] },
   { id: 'hua00', name: '00的画', title: '群友', hp: 5, avatar: 'png', skills: ['sk_daoluan'] },
   { id: 'qiuqiu', name: '秋秋人', title: '群友', hp: 4, skills: ['sk_orange', 'sk_yasaxi'] },
@@ -432,4 +532,6 @@ QYS.data.characters = [
   // TODO: 噜噜打汪头像待补 assets/characters/lulu.png（当前显示首字圆徽）
   { id: 'lulu', name: '噜噜打汪', title: '群友', hp: 4, skills: ['sk_langyabang', 'sk_xinjiangwang', 'sk_ladder'] },
   { id: 'mogu', name: '蘑菇', title: '菌菇召唤师', hp: 4, skills: ['sk_chudong', 'sk_jinzhengu', 'sk_mogushengzhang'] },
+  { id: 'pgjjj', name: '苹果酱酱酱', title: '群友', hp: 4, skills: ['sk_liugou', 'sk_sepingguo'] },
+  { id: 'huluobo', name: '胡萝卜', title: '群友', hp: 4, skills: ['sk_baoweihuluobo', 'sk_cougezi', 'sk_coucoude'] },
 ];
